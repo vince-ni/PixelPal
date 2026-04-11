@@ -130,8 +130,10 @@ final class MenuBarController: NSObject {
 
         frameIndex = 0
         updateFrame()
-        animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.updateFrame() }
+        if currentFrames.count > 1 {
+            animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.updateFrame() }
+            }
         }
     }
 
