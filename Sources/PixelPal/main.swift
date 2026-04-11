@@ -12,6 +12,7 @@ final class MenuBarController: NSObject {
     private let workPatternStore: WorkPatternStore
     private let reminderEngine: ReminderEngine
     private let bubbleController = BubbleWindowController()
+    private let floatingCharacter = FloatingCharacterController()
     private var animationTimer: Timer?
     private var currentFrames: [NSImage] = []
     private var frameIndex = 0
@@ -31,6 +32,7 @@ final class MenuBarController: NSObject {
         super.init()
         setupStatusItem()
         setupPopover()
+        setupFloatingCharacter()
         observeState()
     }
 
@@ -60,6 +62,16 @@ final class MenuBarController: NSObject {
         )
         popover.contentViewController = NSHostingController(rootView: view)
         popover.behavior = .transient
+    }
+
+    private func setupFloatingCharacter() {
+        floatingCharacter.setup()
+        floatingCharacter.onClick = { [weak self] in
+            self?.statusItemClicked()
+        }
+        // Initial animation
+        let charId = discoveryManager.activeCharacter.id
+        floatingCharacter.updateAnimation(characterId: charId, state: .idle)
     }
 
     @objc private func statusItemClicked() {
@@ -93,6 +105,9 @@ final class MenuBarController: NSObject {
 
         animationTimer?.invalidate()
         let characterId = discoveryManager.activeCharacter.id
+
+        // Update floating character too
+        floatingCharacter.updateAnimation(characterId: characterId, state: state)
 
         let interval: TimeInterval
         switch state {
