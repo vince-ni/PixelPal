@@ -19,21 +19,27 @@ struct SpriteSheet {
 
     /// Load frames for a specific character and state.
     /// Naming convention: {characterId}_{state}.gif or {characterId}_{state}.png
-    /// Falls back to: {state}.gif → {state}.png → idle.png → SF Symbol
+    /// For non-idle states: falls back to SF Symbol, NOT to idle.png
+    /// For idle state: falls back to any base sprite
     static func frames(character: String, state: String) -> [NSImage] {
-        let searchNames = [
-            "\(character)_\(state)",
-            state,
-            "\(character)_idle",
-            "idle"
-        ]
-
-        for name in searchNames {
-            if let frames = loadFrames(name), !frames.isEmpty {
-                return frames
-            }
+        // Try character-specific state asset first
+        if let frames = loadFrames("\(character)_\(state)"), !frames.isEmpty {
+            return frames
         }
 
+        // Try generic state asset
+        if let frames = loadFrames(state), !frames.isEmpty {
+            return frames
+        }
+
+        // For idle state only: fall back to base character sprite
+        if state == "idle" {
+            if let frames = loadFrames("\(character)_idle"), !frames.isEmpty { return frames }
+            if let frames = loadFrames("idle"), !frames.isEmpty { return frames }
+            if let frames = loadFrames(character), !frames.isEmpty { return frames }
+        }
+
+        // Non-idle states: use SF Symbol (visually distinct from idle hedgehog)
         return sfSymbolFallback(for: state)
     }
 
