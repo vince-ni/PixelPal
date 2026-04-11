@@ -16,6 +16,9 @@ final class FloatingCharacterController {
 
     var onClick: (() -> Void)?
 
+    /// The content view of the floating window, used as popover anchor
+    var anchorView: NSView? { window?.contentView }
+
     // MARK: - Setup
 
     func setup() {
@@ -171,8 +174,34 @@ private class ClickableView: NSView {
     var onMouseEntered: (() -> Void)?
     var onMouseExited: (() -> Void)?
 
+    private var isDragging = false
+    private var dragStartPoint: NSPoint = .zero
+    private let dragThreshold: CGFloat = 4.0
+
     override func mouseDown(with event: NSEvent) {
-        onClick?()
+        isDragging = false
+        dragStartPoint = event.locationInWindow
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let currentPoint = event.locationInWindow
+        let distance = hypot(currentPoint.x - dragStartPoint.x, currentPoint.y - dragStartPoint.y)
+        if distance > dragThreshold {
+            isDragging = true
+        }
+        if isDragging, let window = self.window {
+            var origin = window.frame.origin
+            origin.x += event.deltaX
+            origin.y -= event.deltaY
+            window.setFrameOrigin(origin)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if !isDragging {
+            onClick?()
+        }
+        isDragging = false
     }
 
     override func mouseEntered(with event: NSEvent) {

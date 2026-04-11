@@ -67,7 +67,7 @@ final class MenuBarController: NSObject {
     private func setupFloatingCharacter() {
         floatingCharacter.setup()
         floatingCharacter.onClick = { [weak self] in
-            self?.statusItemClicked()
+            self?.floatingCharacterClicked()
         }
         // Initial animation
         let charId = discoveryManager.activeCharacter.id
@@ -80,6 +80,16 @@ final class MenuBarController: NSObject {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    private func floatingCharacterClicked() {
+        if popover.isShown {
+            popover.performClose(nil)
+        } else if let floatingView = floatingCharacter.anchorView {
+            popover.show(relativeTo: floatingView.bounds, of: floatingView, preferredEdge: .maxY)
+        } else {
+            statusItemClicked() // fallback to menu bar
         }
     }
 
