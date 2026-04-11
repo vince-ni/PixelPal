@@ -21,11 +21,12 @@ struct ShellEvent {
 
 @MainActor
 final class StateMachine: ObservableObject {
-    @Published private(set) var state: CharacterState = .idle
+    @Published var state: CharacterState = .idle
     @Published private(set) var workMinutes: Int = 0
     @Published private(set) var gitBranch: String = ""
-    @Published private(set) var showBubble: Bool = false
+    @Published var showBubble: Bool = false
     @Published private(set) var bubbleText: String = ""
+    @Published private(set) var bubbleCharacterName: String = ""
 
     private var workStartTime: Date?
     private var lastBreakTime = Date()
@@ -141,5 +142,19 @@ final class StateMachine: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Public bubble methods (used by MenuBarController)
+
+    func showReminderBubble(_ text: String) {
+        guard canShowBubble() else { return }
+        state = .nudge
+        showBubbleMessage(text)
+        scheduleTransition(to: .idle, after: 8.0)
+    }
+
+    func showDiscoveryBubble(_ greeting: String, characterName: String) {
+        bubbleCharacterName = characterName
+        showBubbleMessage(greeting)
     }
 }

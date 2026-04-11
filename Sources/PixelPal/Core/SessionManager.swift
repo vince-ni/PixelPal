@@ -1,0 +1,239 @@
+import Foundation
+
+enum SessionStatus: String, Codable {
+    case idle
+    case running
+    case error
+    case stopped
+}
+
+struct AgentSession: Identifiable, Codable {
+    let id: UUID
+    var provider: String           // "claude-code", "codex", "aider"
+    var workspace: String          // directory path
+    var name: String               // display name (auto-generated or user-set)
+    var status: SessionStatus
+    var isRemote: Bool
+    var remoteURL: String?
+    var startedAt: Date
+    var lastHeartbeat: Date
+    var restartCount: Int
+    var pid: Int32?
+
+    var elapsedMinutes: Int {
+        Int(Date().timeIntervalSince(startedAt) / 60)
+    }
+}
+
+@MainActor
+final class SessionManager: ObservableObject {
+    @Published private(set) var sessions: [AgentSession] = []
+
+    private let maxRestarts = 3
+    private var healthCheckTimer: Timer?
+    private let persistencePath: String
+
+    init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let pixelpalDir = appSupport.appendingPathComponent("PixelPal", isDirectory: true)
+        try? FileManager.default.createDirectory(at: pixelpalDir, withIntermediateDirectories: true)
+        persistencePath = pixelpalDir.appendingPathComponent("sessions.json").path
+
+        loadSessions()
+        startHealthCheck()
+    }
+
+    // MARK: - Session lifecycle
+
+    func createSession(provider: String, workspace: String, remote: Bool = false) {
+        let session = AgentSession(
+            id: UUID(),
+            provider: provider,
+            workspace: workspace,
+            name: nameForWorkspace(workspace),
+            status: .idle,
+            isRemote: remote,
+            remoteURL: nil,
+            startedAt: Date(),
+            lastHeartbeat: Date(),
+            restartCount: 0,
+            pid: nil
+        )
+        sessions.append(session)
+        spawnProcess(for: sessions.count - 1)
+        saveSessions()
+    }
+
+    func stopSession(_ id: UUID) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        killProcess(at: idx)
+        sessions[idx].status = .stopped
+        saveSessions()
+    }
+
+    func removeSession(_ id: UUID) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        killProcess(at: idx)
+        sessions.remove(at: idx)
+        saveSessions()
+    }
+
+    // MARK: - Process management
+
+    private func spawnProcess(for index: Int) {
+        guard index < sessions.count else { return }
+        let session = sessions[index]
+
+        let process = Process()
+        process.currentDirectoryURL = URL(fileURLWithPath: session.workspace)
+
+        switch session.provider {
+        case "claude-code":
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            var args = ["claude"]
+            if session.isRemote { args.append("--remote") }
+            process.arguments = args
+
+        case "codex":
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["codex", "--cwd", session.workspace]
+
+        case "aider":
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["aider"]
+
+        default:
+            return
+        }
+
+        // Redirect stdout/stderr to /dev/null for background sessions
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        process.terminationHandler = { [weak self] proc in
+            Task { @MainActor in
+                self?.handleTermination(sessionId: session.id, exitCode: proc.terminationStatus)
+            }
+        }
+
+        do {
+            try process.run()
+            sessions[index].pid = process.processIdentifier
+            sessions[index].status = .running
+            sessions[index].lastHeartbeat = Date()
+            saveSessions()
+            print("[PixelPal] Spawned \(session.provider) (PID \(process.processIdentifier)) in \(session.workspace)")
+        } catch {
+            print("[PixelPal] Failed to spawn \(session.provider): \(error)")
+            sessions[index].status = .error
+        }
+    }
+
+    private func killProcess(at index: Int) {
+        guard let pid = sessions[index].pid, pid > 0 else { return }
+        kill(pid, SIGTERM)
+        sessions[index].pid = nil
+    }
+
+    private func handleTermination(sessionId: UUID, exitCode: Int32) {
+        guard let idx = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+
+        if exitCode == 0 {
+            sessions[idx].status = .stopped
+            print("[PixelPal] Session \(sessions[idx].name) completed normally")
+        } else if sessions[idx].restartCount < maxRestarts {
+            sessions[idx].restartCount += 1
+            sessions[idx].status = .error
+            print("[PixelPal] Session \(sessions[idx].name) crashed (exit \(exitCode)), restarting (\(sessions[idx].restartCount)/\(maxRestarts))")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.spawnProcess(for: idx)
+            }
+        } else {
+            sessions[idx].status = .error
+            sessions[idx].pid = nil
+            print("[PixelPal] Session \(sessions[idx].name) exceeded max restarts")
+        }
+        saveSessions()
+    }
+
+    // MARK: - Health check
+
+    private func startHealthCheck() {
+        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkHealth() }
+        }
+    }
+
+    private func checkHealth() {
+        for i in sessions.indices {
+            guard let pid = sessions[i].pid, sessions[i].status == .running else { continue }
+            // Check if process is still alive
+            if kill(pid, 0) != 0 {
+                handleTermination(sessionId: sessions[i].id, exitCode: -1)
+            } else {
+                sessions[i].lastHeartbeat = Date()
+            }
+        }
+    }
+
+    // MARK: - Remote detection
+
+    func detectRemoteStatus() {
+        for i in sessions.indices {
+            guard let pid = sessions[i].pid else { continue }
+            // Check if process was launched with --remote by reading /proc or ps
+            let checkProcess = Process()
+            checkProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
+            checkProcess.arguments = ["-p", "\(pid)", "-o", "args="]
+            let pipe = Pipe()
+            checkProcess.standardOutput = pipe
+            try? checkProcess.run()
+            checkProcess.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let args = String(data: data, encoding: .utf8) {
+                sessions[i].isRemote = args.contains("--remote")
+            }
+        }
+    }
+
+    // MARK: - Aggregate state for character
+
+    var aggregateState: CharacterState {
+        if sessions.isEmpty { return .idle }
+        if sessions.contains(where: { $0.status == .error }) { return .comfort }
+        if sessions.contains(where: { $0.status == .running }) { return .working }
+        return .idle
+    }
+
+    // MARK: - Persistence
+
+    private func saveSessions() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(sessions) {
+            try? data.write(to: URL(fileURLWithPath: persistencePath))
+        }
+    }
+
+    private func loadSessions() {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: persistencePath)) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let loaded = try? decoder.decode([AgentSession].self, from: data) {
+            // Mark all sessions as stopped on load (processes died with app restart)
+            sessions = loaded.map { session in
+                var s = session
+                s.status = .stopped
+                s.pid = nil
+                return s
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func nameForWorkspace(_ path: String) -> String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+}
