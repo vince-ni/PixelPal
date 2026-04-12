@@ -115,6 +115,7 @@ final class MenuBarController: NSObject {
 
         animationTimer?.invalidate()
         let characterId = discoveryManager.activeCharacter.id
+        stateMachine.activeCharacterId = characterId
 
         // Update floating character too
         floatingCharacter.updateAnimation(characterId: characterId, state: state)
@@ -174,8 +175,16 @@ final class MenuBarController: NSObject {
     }
 
     private func handleReminder() {
-        if let _ = reminderEngine.currentReminder, !stateMachine.showBubble {
-            stateMachine.showReminderBubble(reminderEngine.currentReminder!.message)
+        if let reminder = reminderEngine.currentReminder, !stateMachine.showBubble {
+            let charId = discoveryManager.activeCharacter.id
+            // Use character-specific speech if available
+            let context: SpeechPool.Context = switch reminder.layer {
+            case 1: .nudgeEye
+            case 2: .nudgeMicro
+            default: .nudgeDeep
+            }
+            let text = SpeechPool.line(character: charId, context: context) ?? reminder.message
+            stateMachine.showReminderBubble(text)
             workPatternStore.recordReminderSuggested()
         }
     }
@@ -183,8 +192,9 @@ final class MenuBarController: NSObject {
     private func handleDiscovery() {
         if let newCharId = discoveryManager.consumePendingDiscovery() {
             if let profile = discoveryManager.profile(for: newCharId) {
+                let greeting = SpeechPool.line(character: newCharId, context: .greeting) ?? profile.greeting
                 stateMachine.state = .celebrate
-                stateMachine.showDiscoveryBubble(profile.greeting, characterName: profile.name)
+                stateMachine.showDiscoveryBubble(greeting, characterName: profile.name)
             }
         }
     }

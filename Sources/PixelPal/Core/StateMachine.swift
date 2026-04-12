@@ -52,6 +52,8 @@ final class StateMachine: ObservableObject {
         case .prompt:
             if let exit = event.exitCode, exit != 0, let dur = event.duration, dur > 3 {
                 state = .comfort
+                let text = SpeechPool.line(character: activeCharacterId, context: .comfort)
+                if let text { showBubbleMessage(text) }
                 scheduleTransition(to: .idle, after: 3.0)
             } else {
                 // 2-second debounce: don't go idle immediately
@@ -68,15 +70,22 @@ final class StateMachine: ObservableObject {
             checkBreakReminders()
 
         case .claude_notify:
+            let previousState = state
             state = .celebrate
-            scheduleTransition(to: state == .working ? .working : .idle, after: 3.0)
-            showBubbleMessage("Claude needs you!")
+            scheduleTransition(to: previousState == .working ? .working : .idle, after: 3.0)
+            let text = SpeechPool.line(character: activeCharacterId, context: .celebrate) ?? "Claude needs you!"
+            showBubbleMessage(text)
 
         case .claude_stop:
             state = .celebrate
+            let text = SpeechPool.line(character: activeCharacterId, context: .celebrate) ?? "Done!"
+            showBubbleMessage(text)
             scheduleTransition(to: .idle, after: 3.0)
         }
     }
+
+    /// Set by MenuBarController to enable character-specific speech
+    var activeCharacterId: String = "spike"
 
     private func checkBreakReminders() {
         guard canShowBubble() else { return }
