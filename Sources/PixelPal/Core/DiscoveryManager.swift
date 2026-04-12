@@ -58,6 +58,8 @@ final class DiscoveryManager: ObservableObject {
                         greeting: ".")
     ]
 
+    private var cloudSync: CloudSync?
+
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let pixelpalDir = appSupport.appendingPathComponent("PixelPal", isDirectory: true)
@@ -65,7 +67,30 @@ final class DiscoveryManager: ObservableObject {
         persistencePath = pixelpalDir.appendingPathComponent("discoveries.json").path
 
         loadDiscoveries()
+
+        // If local data is empty, try restoring from cloud
+        if discovered.isEmpty {
+            let sync = CloudSync()
+            cloudSync = sync
+            if let restored = sync.restoreDiscoveries(), !restored.isEmpty {
+                discovered = restored
+                saveDiscoveries()
+            }
+        } else {
+            cloudSync = CloudSync()
+        }
+
         ensureSpikeExists()
+
+        // Observe iCloud changes from other devices
+        cloudSync?.startObserving { [weak self] remoteDiscoveries in
+            guard let self else { return }
+            // Merge: keep whichever has more discoveries
+            if remoteDiscoveries.count > self.discovered.count {
+                self.discovered = remoteDiscoveries
+                self.saveDiscoveries()
+            }
+        }
     }
 
     // MARK: - Discovery checks
@@ -199,7 +224,10 @@ final class DiscoveryManager: ObservableObject {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         if let data = try? encoder.encode(discovered) {
+            // L1: Local
             try? data.write(to: URL(fileURLWithPath: persistencePath))
+            // L2 + L3: Cloud
+            cloudSync?.syncDiscoveries(discovered)
         }
     }
 

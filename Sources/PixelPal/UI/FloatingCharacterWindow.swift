@@ -67,8 +67,12 @@ final class FloatingCharacterController {
             }
         }
 
-        // Position: bottom-right corner
-        if let screen = NSScreen.main {
+        // Restore saved position or default to bottom-right corner
+        let savedX = UserDefaults.standard.double(forKey: "pixelpal_float_x")
+        let savedY = UserDefaults.standard.double(forKey: "pixelpal_float_y")
+        if savedX != 0 || savedY != 0 {
+            panel.setFrameOrigin(NSPoint(x: savedX, y: savedY))
+        } else if let screen = NSScreen.main {
             let visibleFrame = screen.visibleFrame
             let x = visibleFrame.maxX - size.width - 20
             let y = visibleFrame.minY + 80
@@ -200,6 +204,12 @@ private class ClickableView: NSView {
     override func mouseUp(with event: NSEvent) {
         if !isDragging {
             onClick?()
+        } else {
+            // Save position after drag
+            if let origin = self.window?.frame.origin {
+                UserDefaults.standard.set(origin.x, forKey: "pixelpal_float_x")
+                UserDefaults.standard.set(origin.y, forKey: "pixelpal_float_y")
+            }
         }
         isDragging = false
     }
