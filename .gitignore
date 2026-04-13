@@ -3,3 +3,8 @@
 *.xcodeproj/
 DerivedData/
 .DS_Store
+
+# Character assets (closed source — not included in public repo)
+Assets/*.png
+Assets/*.gif
+Assets/*.webp
