@@ -96,17 +96,8 @@ final class FloatingCharacterController {
 
         // For the floating window, use larger sprites if available
         let largeFrames: [NSImage]
-        if stateStr == "idle" {
-            // Try to load the large sprite for idle
-            let largePath = ((ProcessInfo.processInfo.environment["HOME"] ?? "") as NSString)
-                .appendingPathComponent("Projects/PixelPal/Assets/spike_large.png")
-            if let data = try? Data(contentsOf: URL(fileURLWithPath: largePath)),
-               let img = NSImage(data: data) {
-                let scaled = scaleForFloating(img)
-                largeFrames = [scaled]
-            } else {
-                largeFrames = newFrames.map { scaleForFloating($0) }
-            }
+        if stateStr == "idle", let img = loadLargeSprite(characterId) {
+            largeFrames = [scaleForFloating(img)]
         } else {
             largeFrames = newFrames.map { scaleForFloating($0) }
         }
@@ -137,6 +128,22 @@ final class FloatingCharacterController {
         guard !currentFrames.isEmpty else { return }
         spriteView?.image = currentFrames[frameIndex % currentFrames.count]
         frameIndex += 1
+    }
+
+    private func loadLargeSprite(_ characterId: String) -> NSImage? {
+        let name = "\(characterId)_large.png"
+        let dirs = [
+            (Bundle.main.resourcePath ?? "") + "/Assets",
+            ((ProcessInfo.processInfo.environment["HOME"] ?? "") as NSString).appendingPathComponent("Projects/PixelPal/Assets")
+        ]
+        for dir in dirs {
+            let path = (dir as NSString).appendingPathComponent(name)
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+               let img = NSImage(data: data) {
+                return img
+            }
+        }
+        return nil
     }
 
     private func scaleForFloating(_ source: NSImage) -> NSImage {
