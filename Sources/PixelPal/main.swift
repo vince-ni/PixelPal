@@ -16,7 +16,9 @@ final class MenuBarController: NSObject {
     private var animationTimer: Timer?
     private var currentFrames: [NSImage] = []
     private var frameIndex = 0
-    private var popover = NSPopover()
+    private var panelWindow: NSPanel?
+    private var panelVisible = false
+    private var clickOutsideMonitor: Any?
     private var stateObserver: Timer?
 
     init(stateMachine: StateMachine,
@@ -31,7 +33,7 @@ final class MenuBarController: NSObject {
         self.reminderEngine = reminderEngine
         super.init()
         setupStatusItem()
-        setupPopover()
+        setupPanel()
         setupFloatingCharacter()
         observeState()
     }
@@ -45,7 +47,7 @@ final class MenuBarController: NSObject {
         switchAnimation(to: .idle)
     }
 
-    private func setupPopover() {
+    private func setupPanel() {
         let view = SessionPanelView(
             sessionManager: sessionManager,
             discoveryManager: discoveryManager,
@@ -54,14 +56,25 @@ final class MenuBarController: NSObject {
             onTakeBreak: { [weak self] in
                 self?.reminderEngine.recordBreak()
                 self?.workPatternStore.recordBreakTaken()
-                self?.popover.performClose(nil)
+                self?.hidePanel()
             },
             onQuit: {
                 NSApplication.shared.terminate(nil)
             }
         )
-        popover.contentViewController = NSHostingController(rootView: view)
-        popover.behavior = .transient
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 420),
+            styleMask: [.titled, .closable, .nonactivatingPanel, .hudWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "PixelPal"
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        panel.isReleasedWhenClosed = false
+        panel.contentView = NSHostingView(rootView: view)
+        panelWindow = panel
     }
 
     private func setupFloatingCharacter() {
@@ -75,21 +88,54 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func statusItemClicked() {
-        guard let button = statusItem.button else { return }
-        if popover.isShown {
-            popover.performClose(nil)
+        if panelVisible {
+            hidePanel()
         } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Position below menu bar button
+            if let button = statusItem.button, let buttonWindow = button.window {
+                let buttonFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+                showPanel(near: NSPoint(x: buttonFrame.midX - 150, y: buttonFrame.minY - 430))
+            }
         }
     }
 
     private func floatingCharacterClicked() {
-        if popover.isShown {
-            popover.performClose(nil)
-        } else if let floatingView = floatingCharacter.anchorView {
-            popover.show(relativeTo: floatingView.bounds, of: floatingView, preferredEdge: .maxY)
+        if panelVisible {
+            hidePanel()
+        } else if let floatingView = floatingCharacter.anchorView, let window = floatingView.window {
+            // Position above the floating character
+            let charFrame = window.frame
+            showPanel(near: NSPoint(x: charFrame.midX - 150, y: charFrame.maxY + 8))
         } else {
-            statusItemClicked() // fallback to menu bar
+            statusItemClicked()
+        }
+    }
+
+    private func showPanel(near point: NSPoint) {
+        guard let panel = panelWindow, let screen = NSScreen.main else { return }
+
+        // Clamp to screen bounds
+        let visibleFrame = screen.visibleFrame
+        let panelSize = panel.frame.size
+        let x = max(visibleFrame.minX + 8, min(point.x, visibleFrame.maxX - panelSize.width - 8))
+        let y = max(visibleFrame.minY + 8, min(point.y, visibleFrame.maxY - panelSize.height - 8))
+
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.orderFront(nil)
+        panelVisible = true
+
+        // Click-outside-to-close monitor
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.hidePanel()
+        }
+    }
+
+    private func hidePanel() {
+        panelWindow?.orderOut(nil)
+        panelVisible = false
+        if let monitor = clickOutsideMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickOutsideMonitor = nil
         }
     }
 
