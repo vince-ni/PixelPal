@@ -17,6 +17,7 @@ final class MenuBarController: NSObject {
     private let evolutionEngine = EvolutionEngine()
     private let workContext: WorkContext
     private let speechEngine: SpeechEngine
+    private let notificationRouter = NotificationRouter()
     private var animationTimer: Timer?
     private var currentFrames: [NSImage] = []
     private var frameIndex = 0
@@ -39,10 +40,25 @@ final class MenuBarController: NSObject {
         self.workContext = workContext
         self.speechEngine = SpeechEngine(workContext: workContext, reminderEngine: reminderEngine)
         super.init()
+        reconfigureNtfySink()
         setupStatusItem()
         setupPanel()
         setupFloatingCharacter()
         observeState()
+    }
+
+    /// Read ntfy settings from UserDefaults and rebuild the sink list.
+    /// Called on startup and whenever the user toggles the setting in UI.
+    func reconfigureNtfySink() {
+        notificationRouter.removeAllSinks()
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "pixelpal_ntfy_enabled"),
+              let topic = defaults.string(forKey: "pixelpal_ntfy_topic"),
+              !topic.isEmpty else {
+            return
+        }
+        let server = defaults.string(forKey: "pixelpal_ntfy_server") ?? "https://ntfy.sh"
+        notificationRouter.addSink(NtfyRemoteSink(topic: topic, server: server))
     }
 
     private func setupStatusItem() {
@@ -77,6 +93,9 @@ final class MenuBarController: NSObject {
             },
             onQuit: {
                 NSApplication.shared.terminate(nil)
+            },
+            onReconfigureNtfy: { [weak self] in
+                self?.reconfigureNtfySink()
             }
         )
 
@@ -276,6 +295,15 @@ final class MenuBarController: NSObject {
                 break // keep current state
             }
             stateMachine.showReminderBubble(text)
+
+            // Fan out to any remote sinks (ntfy etc.). Router silently drops
+            // triggers that don't warrant a push — rest reminders stay local.
+            notificationRouter.route(
+                trigger: trigger,
+                text: text,
+                characterId: charId,
+                characterName: discoveryManager.activeCharacter.name
+            )
         }
     }
 

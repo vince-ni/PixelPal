@@ -13,6 +13,7 @@ struct SessionPanelView: View {
     let onToggleMinimal: (Bool) -> Void
     let onUninstall: () -> Void
     let onQuit: () -> Void
+    let onReconfigureNtfy: () -> Void
 
     @State private var showNewSession = false
     @State private var selectedTab = 0  // 0=sessions, 1=companions
@@ -220,6 +221,10 @@ struct SessionPanelView: View {
 
     @State private var showUninstallConfirm = false
     @State private var isMinimalMode = UserDefaults.standard.bool(forKey: "pixelpal_minimal_mode")
+    @State private var showPhoneSettings = false
+    @State private var ntfyEnabled = UserDefaults.standard.bool(forKey: "pixelpal_ntfy_enabled")
+    @State private var ntfyTopic = UserDefaults.standard.string(forKey: "pixelpal_ntfy_topic") ?? ""
+    @State private var ntfyTestStatus: String = ""
 
     private var footer: some View {
         VStack(spacing: 6) {
@@ -234,8 +239,18 @@ struct SessionPanelView: View {
                     }
                     .help("Hide floating character, keep menu bar icon only")
                 Spacer()
+                Button(action: { showPhoneSettings.toggle() }) {
+                    Image(systemName: ntfyEnabled ? "iphone.radiowaves.left.and.right" : "iphone")
+                        .font(.system(size: 12))
+                        .foregroundColor(ntfyEnabled ? .blue : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Phone notifications")
                 Button("I took a break", action: onTakeBreak)
                     .font(.system(size: 11))
+            }
+            if showPhoneSettings {
+                phoneSettingsSection
             }
             HStack {
                 Button("Uninstall") { showUninstallConfirm = true }
@@ -256,6 +271,99 @@ struct SessionPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    // MARK: - Phone Settings
+
+    private var phoneSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Push to phone via ntfy", isOn: $ntfyEnabled)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .font(.system(size: 11))
+                .onChange(of: ntfyEnabled) { _, newValue in
+                    if newValue && ntfyTopic.isEmpty {
+                        ntfyTopic = NtfyRemoteSink.generateTopic()
+                        UserDefaults.standard.set(ntfyTopic, forKey: "pixelpal_ntfy_topic")
+                    }
+                    UserDefaults.standard.set(newValue, forKey: "pixelpal_ntfy_enabled")
+                    onReconfigureNtfy()
+                }
+
+            if ntfyEnabled {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Topic (keep secret — anyone with this can subscribe)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text(ntfyTopic)
+                            .font(.system(size: 10, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Button(action: copyTopicToPasteboard) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy topic")
+                        Button(action: regenerateTopic) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Regenerate (old topic stops working)")
+                    }
+
+                    HStack {
+                        Button("Test push") {
+                            Task { await sendTestPush() }
+                        }
+                        .font(.system(size: 10))
+                        Spacer()
+                        if !ntfyTestStatus.isEmpty {
+                            Text(ntfyTestStatus)
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Text("Install the ntfy app on your phone and subscribe to this topic.")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+                .padding(6)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(4)
+            }
+        }
+    }
+
+    private func copyTopicToPasteboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ntfyTopic, forType: .string)
+        ntfyTestStatus = "Copied"
+    }
+
+    private func regenerateTopic() {
+        ntfyTopic = NtfyRemoteSink.generateTopic()
+        UserDefaults.standard.set(ntfyTopic, forKey: "pixelpal_ntfy_topic")
+        onReconfigureNtfy()
+        ntfyTestStatus = "Regenerated"
+    }
+
+    private func sendTestPush() async {
+        let server = UserDefaults.standard.string(forKey: "pixelpal_ntfy_server") ?? "https://ntfy.sh"
+        let sink = NtfyRemoteSink(topic: ntfyTopic, server: server)
+        let charName = discoveryManager.activeCharacter.name
+        let test = RemoteNotification(
+            kind: .taskComplete,
+            characterId: discoveryManager.activeCharacter.id,
+            characterName: charName,
+            text: "Test from \(charName) — if you see this on your phone, you're wired up."
+        )
+        ntfyTestStatus = "Sending…"
+        await sink.deliver(test)
+        ntfyTestStatus = "Sent"
     }
 
     // MARK: - Work Dashboard
