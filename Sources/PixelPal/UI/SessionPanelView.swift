@@ -19,8 +19,15 @@ struct SessionPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
+            // Header (character-first)
             header
+            Divider()
+
+            // Global work dashboard — visible in every tab
+            workDashboard
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 6)
             Divider()
 
             // Tab bar
@@ -143,13 +150,27 @@ struct SessionPanelView: View {
 
     private var sessionsTab: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // New session button — highest-frequency action, top placement
+            Button(action: { showNewSession = true }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("New Session")
+                }
+                .font(.system(size: 12, weight: .medium))
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+            .popover(isPresented: $showNewSession) {
+                NewSessionView(sessionManager: sessionManager, isPresented: $showNewSession)
+            }
+
             if sessionManager.sessions.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     Text("No active sessions")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                     Text("Work in any terminal — PixelPal tracks your shell activity automatically.")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -160,25 +181,7 @@ struct SessionPanelView: View {
                     sessionRow(session)
                 }
                 .padding(.horizontal, 12)
-            }
-
-            // Work dashboard
-            workDashboard
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-
-            // New session button
-            Button(action: { showNewSession = true }) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("New Session")
-                }
-                .font(.system(size: 12))
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
-            .popover(isPresented: $showNewSession) {
-                NewSessionView(sessionManager: sessionManager, isPresented: $showNewSession)
+                .padding(.bottom, 8)
             }
         }
     }
@@ -410,60 +413,64 @@ struct SessionPanelView: View {
         ntfyTestStatus = "Sent"
     }
 
-    // MARK: - Work Dashboard
+    // MARK: - Work Dashboard (global, between header and tabs)
 
-    private var workDashboard: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Today's summary row
-            HStack(spacing: 12) {
-                dashStat(icon: "clock", value: formatHours(workPatternStore.todaySummary.totalWorkMinutes), label: "today")
-                dashStat(icon: "checkmark.circle", value: "\(workContext.todayCommits)", label: "commits")
-                dashStat(icon: "xmark.circle", value: "\(workContext.todayErrors)", label: "errors")
-                dashStat(icon: "cup.and.saucer", value: "\(workPatternStore.todaySummary.breakCount)", label: "breaks")
-            }
-
-            // Current context row
-            HStack(spacing: 6) {
-                if !workContext.currentBranch.isEmpty {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 9))
-                        Text("\(workContext.currentBranch)")
-                            .font(.system(size: 10, weight: .medium))
-                        Text("· \(workContext.branchMinutes)m")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                }
-                Spacer()
-                if workContext.isFlowState {
-                    HStack(spacing: 3) {
-                        Circle().fill(.green).frame(width: 5, height: 5)
-                        Text("flow · \(workContext.flowMinutes)m")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.green)
-                    }
-                } else if workContext.minutesSinceBreak > 0 {
-                    Text("break \(workContext.minutesSinceBreak)m ago")
-                        .font(.system(size: 10))
-                        .foregroundColor(workContext.minutesSinceBreak > 52 ? .orange : .secondary)
-                }
-            }
-        }
+    /// Today's summary as a single information-dense line. Replaces four
+    /// separate icon-stat blocks. Reads left-to-right as a sentence so the
+    /// eye doesn't hop between visual cells.
+    private var todaySummaryLine: String {
+        let summary = workPatternStore.todaySummary
+        var parts: [String] = []
+        parts.append(formatHours(summary.totalWorkMinutes))
+        if workContext.todayCommits > 0 { parts.append("\(workContext.todayCommits) commit\(workContext.todayCommits == 1 ? "" : "s")") }
+        if workContext.todayErrors > 0 { parts.append("\(workContext.todayErrors) error\(workContext.todayErrors == 1 ? "" : "s")") }
+        if summary.breakCount > 0 { parts.append("\(summary.breakCount) break\(summary.breakCount == 1 ? "" : "s")") }
+        return parts.joined(separator: " · ")
     }
 
-    private func dashStat(icon: String, value: String, label: String) -> some View {
-        VStack(spacing: 1) {
-            HStack(spacing: 2) {
-                Image(systemName: icon)
-                    .font(.system(size: 9))
+    private var workDashboard: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text("Today")
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
-                Text(value)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                Text(todaySummaryLine)
+                    .font(.system(size: 11))
+                    .foregroundColor(.primary)
+                Spacer()
             }
-            Text(label)
-                .font(.system(size: 8))
-                .foregroundColor(.secondary)
+
+            // Context line: branch, flow, break. Only render when we have
+            // something to say — keeps the dashboard at 1 line when empty.
+            if !workContext.currentBranch.isEmpty || workContext.isFlowState || workContext.minutesSinceBreak > 0 {
+                HStack(spacing: 6) {
+                    if !workContext.currentBranch.isEmpty {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                            Text(workContext.currentBranch)
+                                .font(.system(size: 10, weight: .medium))
+                            Text("· \(workContext.branchMinutes)m")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if workContext.isFlowState {
+                        HStack(spacing: 3) {
+                            Circle().fill(.green).frame(width: 5, height: 5)
+                            Text("flow · \(workContext.flowMinutes)m")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.green)
+                        }
+                    } else if workContext.minutesSinceBreak > 0 {
+                        Text("break \(workContext.minutesSinceBreak)m ago")
+                            .font(.system(size: 10))
+                            .foregroundColor(workContext.minutesSinceBreak > 52 ? .orange : .secondary)
+                    }
+                }
+            }
         }
     }
 
