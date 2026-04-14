@@ -118,17 +118,12 @@ struct SessionPanelView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            if let avatar = SpriteSheet.avatar(character: discoveryManager.activeCharacter.id, size: 32) {
-                Image(nsImage: avatar)
-                    .interpolation(.none)
-                    .frame(width: 32, height: 32)
-            } else {
-                // Fallback: SF Symbol if no sprite on disk (running from source without Assets)
-                Image(systemName: "pawprint.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.secondary)
-                    .frame(width: 32, height: 32)
-            }
+            AnimatedAvatarView(
+                characterId: discoveryManager.activeCharacter.id,
+                state: stateMachine.state,
+                evolution: activeStage,
+                size: 32
+            )
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(discoveryManager.activeCharacter.name)
