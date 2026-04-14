@@ -50,8 +50,6 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>SUFeedURL</key>
-    <string>https://pixelpal.app/appcast.xml</string>
 </dict>
 </plist>
 PLIST

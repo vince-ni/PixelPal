@@ -179,7 +179,7 @@ A few principles that show up everywhere in the code:
 - **95% quiet, 5% personality.** Ambient by default. A companion, not a notification generator.
 - **Never punish absence.** Take a week off. Come back. The character is exactly as you left it, and will say something warm.
 - **Time, not money.** Evolution is driven by days of companionship. There is no way to pay to skip it.
-- **Character resources are closed.** The code is MIT. The sprite art, speech pools, and discovery conditions are not in this repo — that's where the product identity lives.
+- **Sprite art is closed.** The code is MIT. The pixel sprites are not in this repo — that's where the visual identity lives. Running from source gives you an SF Symbol fallback; the published builds ship with the art.
 
 ---
 
@@ -189,4 +189,4 @@ Character art generated with [Pixel Engine](https://pixelengine.ai). Product des
 
 ## License
 
-MIT — see [LICENSE](LICENSE). License applies to code in this repository. Character assets, speech pools, and discovery conditions are not distributed under MIT.
+MIT — see [LICENSE](LICENSE). License applies to code in this repository. Pixel sprite art (under `Assets/`) is not distributed under MIT and is not included in this repo.
