@@ -90,7 +90,7 @@ struct BubbleView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
                 Text(text)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(2)
             }

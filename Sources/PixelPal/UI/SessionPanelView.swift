@@ -46,12 +46,19 @@ struct SessionPanelView: View {
             header
             Divider()
 
-            // Global work dashboard — visible in every tab
+            // Global work dashboard — visible in every tab.
+            // Light card treatment makes it read as a status region, not
+            // just another row wedged between two dividers.
             workDashboard
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.06))
+                )
+                .padding(.horizontal, 8)
                 .padding(.top, 8)
-                .padding(.bottom, 6)
-            Divider()
+                .padding(.bottom, 4)
 
             // Tab bar
             Picker("", selection: $selectedTab) {
