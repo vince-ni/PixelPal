@@ -67,8 +67,43 @@ struct SessionPanelView: View {
             } else {
                 companionsTab
             }
+
+            Divider()
+            ambientFooter
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
         }
         .frame(width: 280)
+    }
+
+    // MARK: - Ambient footer (character-in-the-room)
+
+    /// A quiet one-line signature of presence at the bottom of the panel.
+    /// Carries the most recent speech bubble text (so a bubble fading from
+    /// the corner lingers here as a record) or a relationship anchor when
+    /// the character hasn't said anything yet today.
+    private var ambientLine: String {
+        let text = stateMachine.bubbleText
+        if !text.isEmpty { return text }
+        if activeEvolutionDays > 0 { return "\(activeEvolutionDays) days together so far." }
+        return "Here for you."
+    }
+
+    private var ambientFooter: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\u{201C}\(ambientLine)\u{201D}")
+                .font(.system(size: 11, weight: .regular, design: .serif))
+                .italic()
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 4)
+            Text("— \(discoveryManager.activeCharacter.name)")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary.opacity(0.7))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     // MARK: - Header (character-first)
