@@ -1,6 +1,20 @@
 import SwiftUI
 import PixelPalCore
 
+/// Parse a `#RRGGBB` / `RRGGBB` hex string into a SwiftUI `Color`.
+/// Returns nil for malformed input so the caller can fall back to system accent.
+extension Color {
+    init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        let r = Double((v >> 16) & 0xFF) / 255.0
+        let g = Double((v >> 8) & 0xFF) / 255.0
+        let b = Double(v & 0xFF) / 255.0
+        self = Color(red: r, green: g, blue: b)
+    }
+}
+
 /// Session panel shown when clicking the menu bar icon or floating character.
 /// Lists all agent sessions with status, shows companion log, work stats.
 struct SessionPanelView: View {
@@ -17,7 +31,16 @@ struct SessionPanelView: View {
     @State private var showNewSession = false
     @State private var selectedTab = 0  // 0=sessions, 1=companions
 
+    private var activeAccent: Color {
+        Color(hex: discoveryManager.activeCharacter.accentHex) ?? .accentColor
+    }
+
     var body: some View {
+        panelBody
+            .tint(activeAccent)
+    }
+
+    private var panelBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header (character-first)
             header

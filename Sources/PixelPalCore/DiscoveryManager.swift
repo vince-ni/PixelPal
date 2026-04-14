@@ -9,14 +9,17 @@ public struct CharacterProfile {
     public let style: String              // Simple / Expressive / Complex / Enigmatic
     public let hint: String               // shown in companion log before discovery
     public let greeting: String           // first words when discovered
+    public let accentHex: String          // per-character panel accent color (#RRGGBB)
 
-    public init(id: String, name: String, species: String, style: String, hint: String, greeting: String) {
+    public init(id: String, name: String, species: String, style: String,
+                hint: String, greeting: String, accentHex: String) {
         self.id = id
         self.name = name
         self.species = species
         self.style = style
         self.hint = hint
         self.greeting = greeting
+        self.accentHex = accentHex
     }
 
     // Discovery condition is evaluated by DiscoveryManager, not stored here
@@ -36,35 +39,45 @@ public final class DiscoveryManager: ObservableObject {
 
     private let persistencePath: String
 
-    // All 9 characters defined
+    // All 9 characters defined. Accent colors are chosen to work against
+    // both light and dark panel backgrounds (mid-brightness, saturated).
     public static let allCharacters: [CharacterProfile] = [
         CharacterProfile(id: "spike", name: "Spike", species: "Hedgehog", style: "Simple",
                         hint: "Has been here from the start",
-                        greeting: "Hi! I'm Spike. I'll keep you company!"),
+                        greeting: "Hi! I'm Spike. I'll keep you company!",
+                        accentHex: "#FF8C42"),
         CharacterProfile(id: "dash", name: "Dash", species: "Cheetah", style: "Simple",
                         hint: "Takes time to trust you",
-                        greeting: "Oh... you're here too... I guess I can stay..."),
+                        greeting: "Oh... you're here too... I guess I can stay...",
+                        accentHex: "#2EC4B6"),
         CharacterProfile(id: "badge", name: "Badge", species: "Golden Retriever", style: "Expressive",
                         hint: "Studying your work patterns",
-                        greeting: "New user detected. Analyzing data. Hello."),
+                        greeting: "New user detected. Analyzing data. Hello.",
+                        accentHex: "#E2B93B"),
         CharacterProfile(id: "ramble", name: "Ramble", species: "Owl", style: "Expressive",
                         hint: "Waits until you've settled in",
-                        greeting: "Oh finally! Did you know 73% of bugs happen when— anyway, hi!"),
+                        greeting: "Oh finally! Did you know 73% of bugs happen when— anyway, hi!",
+                        accentHex: "#9B5DE5"),
         CharacterProfile(id: "rush", name: "Rush", species: "Turtle", style: "Expressive",
                         hint: "Attracted to a certain rhythm",
-                        greeting: "FINALLY! Do you know how long I waited?? 47 DAYS!!!"),
+                        greeting: "FINALLY! Do you know how long I waited?? 47 DAYS!!!",
+                        accentHex: "#70C13E"),
         CharacterProfile(id: "blunt", name: "Blunt", species: "Fox", style: "Complex",
                         hint: "Watching your output",
-                        greeting: "You've completed 50 tasks. That's a fact, not a compliment."),
+                        greeting: "You've completed 50 tasks. That's a fact, not a compliment.",
+                        accentHex: "#3A6EA5"),
         CharacterProfile(id: "meltdown", name: "Meltdown", species: "Phoenix", style: "Complex",
                         hint: "Only appears at milestones",
-                        greeting: "NO!! 100 TASKS!! THIS IS INSANE!! 🔥"),
+                        greeting: "NO!! 100 TASKS!! THIS IS INSANE!! 🔥",
+                        accentHex: "#E63946"),
         CharacterProfile(id: "dragon", name: "...", species: "Dragon", style: "Enigmatic",
                         hint: "Only comes out at night",
-                        greeting: "......"),
+                        greeting: "......",
+                        accentHex: "#6A4C93"),
         CharacterProfile(id: "slime", name: ".", species: "Slime", style: "Enigmatic",
                         hint: "......",
-                        greeting: ".")
+                        greeting: ".",
+                        accentHex: "#8D99AE")
     ]
 
     private var cloudSync: CloudSync?
