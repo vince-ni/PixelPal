@@ -316,7 +316,7 @@ struct SessionPanelView: View {
                 if isFound {
                     Text(character.name)
                         .font(.system(size: 12, weight: .medium))
-                    Text("Day \(discovery?.evolutionDays ?? 0) · \(EvolutionStage.from(days: discovery?.evolutionDays ?? 0).label) · \(character.style)")
+                    Text("Day \(discovery?.evolutionDays ?? 0) · \(EvolutionStage.from(days: discovery?.evolutionDays ?? 0).label)")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 } else {

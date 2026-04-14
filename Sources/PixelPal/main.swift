@@ -256,8 +256,8 @@ final class MenuBarController: NSObject {
         if stateMachine.showBubble && !isBubbleShowing {
             isBubbleShowing = true
             let char = discoveryManager.activeCharacter
-            let emoji = emojiForState(stateMachine.state)
-            bubbleController.show(text: stateMachine.bubbleText, emoji: emoji, characterName: char.name) { [weak self] in
+            let avatar = SpriteSheet.avatar(character: char.id, size: 32)
+            bubbleController.show(text: stateMachine.bubbleText, avatar: avatar, characterName: char.name) { [weak self] in
                 self?.speechEngine.userDismissed()
                 self?.stateMachine.userDismissedBubble()
                 self?.isBubbleShowing = false
@@ -324,14 +324,6 @@ final class MenuBarController: NSObject {
         }
     }
 
-    private func emojiForState(_ state: CharacterState) -> String {
-        switch state {
-        case .celebrate: return "🎉"
-        case .nudge: return "☕"
-        case .comfort: return "💜"
-        default: return "🦔"
-        }
-    }
 }
 
 // MARK: - App Delegate

@@ -8,7 +8,7 @@ import SwiftUI
 final class BubbleWindowController {
     private var window: NSPanel?
 
-    func show(text: String, emoji: String, characterName: String, onDismiss: @escaping () -> Void) {
+    func show(text: String, avatar: NSImage?, characterName: String, onDismiss: @escaping () -> Void) {
         let bubbleWidth: CGFloat = 280
         let bubbleHeight: CGFloat = 72
         let margin: CGFloat = 20
@@ -31,7 +31,7 @@ final class BubbleWindowController {
 
         guard let window else { return }
 
-        let bubbleView = BubbleView(text: text, emoji: emoji, characterName: characterName) {
+        let bubbleView = BubbleView(text: text, avatar: avatar, characterName: characterName) {
             onDismiss()
         }
         window.contentView = NSHostingView(rootView: bubbleView)
@@ -68,14 +68,22 @@ final class BubbleWindowController {
 
 struct BubbleView: View {
     let text: String
-    let emoji: String
+    let avatar: NSImage?
     let characterName: String
     let onDismiss: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(emoji)
-                .font(.system(size: 24))
+            if let avatar {
+                Image(nsImage: avatar)
+                    .interpolation(.none)
+                    .frame(width: 32, height: 32)
+            } else {
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.secondary)
+                    .frame(width: 32, height: 32)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(characterName)
