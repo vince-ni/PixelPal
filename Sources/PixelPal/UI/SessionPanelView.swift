@@ -143,14 +143,14 @@ struct SessionPanelView: View {
 
     private var headerSubtitle: String {
         let dayFragment = activeEvolutionDays > 0 ? " · Day \(activeEvolutionDays)" : ""
-        // Idle → show the relationship (stage). Non-idle → show the moment
-        // (character-voiced state). The day count stays as continuity anchor.
+        let characterId = discoveryManager.activeCharacter.id
+        // Idle → show the relationship (stage, character-voiced).
+        // Non-idle → show the moment (state, character-voiced).
+        // The day count stays as continuity anchor.
         if stateMachine.state == .idle {
-            return activeStage.label + dayFragment
+            return SpeechPool.stageLabel(character: characterId, stage: activeStage) + dayFragment
         }
-        let label = SpeechPool.stateLabel(character: discoveryManager.activeCharacter.id,
-                                          state: stateMachine.state.rawValue)
-        return label + dayFragment
+        return SpeechPool.stateLabel(character: characterId, state: stateMachine.state.rawValue) + dayFragment
     }
 
     // MARK: - Settings menu (gear)
@@ -309,9 +309,11 @@ struct SessionPanelView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 if isFound {
+                    let days = discovery?.evolutionDays ?? 0
+                    let stage = EvolutionStage.from(days: days)
                     Text(character.name)
                         .font(.system(size: 12, weight: .medium))
-                    Text("Day \(discovery?.evolutionDays ?? 0) · \(EvolutionStage.from(days: discovery?.evolutionDays ?? 0).label)")
+                    Text("Day \(days) · \(SpeechPool.stageLabel(character: character.id, stage: stage))")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 } else {

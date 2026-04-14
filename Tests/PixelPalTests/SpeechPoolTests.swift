@@ -46,6 +46,30 @@ struct SpeechPoolTests {
         #expect(SpeechPool.stateLabel(character: "ghost", state: "nudge") == "Looking out for you")
     }
 
+    @Test("Every character has a stage label for every evolution stage")
+    func stageLabelsCovered() {
+        let characters = ["spike", "dash", "badge", "ramble", "rush", "blunt", "meltdown", "dragon", "slime"]
+        let stages: [EvolutionStage] = [.newborn, .familiar, .settled, .bonded, .devoted, .eternal]
+        for char in characters {
+            for stage in stages {
+                let label = SpeechPool.stageLabel(character: char, stage: stage)
+                #expect(!label.isEmpty, "Character '\(char)' has empty stage label for \(stage)")
+            }
+        }
+    }
+
+    @Test("Unknown character stage label falls back to engineering name, not empty")
+    func unknownCharacterStageFallback() {
+        #expect(SpeechPool.stageLabel(character: "ghost", stage: .bonded) == "Bonded")
+        #expect(SpeechPool.stageLabel(character: "ghost", stage: .newborn) == "New")
+    }
+
+    @Test("Known character stage label is distinct from engineering name")
+    func spikeStageDistinct() {
+        #expect(SpeechPool.stageLabel(character: "spike", stage: .bonded) != "Bonded")
+        #expect(SpeechPool.stageLabel(character: "spike", stage: .bonded).contains("friend"))
+    }
+
     @Test("Known character returns character-voiced label, not neutral fallback")
     func spikeLabelDistinct() {
         let spikeIdle = SpeechPool.stateLabel(character: "spike", state: "idle")

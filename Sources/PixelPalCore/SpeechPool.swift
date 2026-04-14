@@ -496,4 +496,94 @@ public struct SpeechPool {
         default:          return state
         }
     }
+
+    // MARK: - Stage labels (the character's read of the relationship)
+
+    /// Per-character, per-stage description of the relationship. Shown in
+    /// the panel header instead of the engineering stage name ("Bonded"
+    /// reads like a D&D attribute; "Best friend" reads like a person).
+    /// Indexed: character id → EvolutionStage → label.
+    private static let stageLabels: [String: [EvolutionStage: String]] = [
+        "spike": [
+            .newborn: "Just met",
+            .familiar: "Buddy",
+            .settled: "Regular",
+            .bonded: "Best friend",
+            .devoted: "Forever friend",
+            .eternal: "Always here",
+        ],
+        "dash": [
+            .newborn: "Stranger",
+            .familiar: "Acquaintance",
+            .settled: "…okay",
+            .bonded: "Close enough",
+            .devoted: "Won't leave",
+            .eternal: "…yours",
+        ],
+        "badge": [
+            .newborn: "Subject: new",
+            .familiar: "Subject: known",
+            .settled: "Subject: regular",
+            .bonded: "Subject: trusted",
+            .devoted: "Subject: loyal",
+            .eternal: "Subject: kin",
+        ],
+        "ramble": [
+            .newborn: "New friend!",
+            .familiar: "Getting cozy",
+            .settled: "Settled in",
+            .bonded: "Kindred spirit",
+            .devoted: "Favorite person",
+            .eternal: "Forever pal",
+        ],
+        "rush": [
+            .newborn: "NEW!",
+            .familiar: "FINALLY FRIEND",
+            .settled: "REGULAR YES",
+            .bonded: "BEST FRIEND!!",
+            .devoted: "INSEPARABLE",
+            .eternal: "ETERNAL NOW",
+        ],
+        "blunt": [
+            .newborn: "Interest: low",
+            .familiar: "Interest: noted",
+            .settled: "Interest: steady",
+            .bonded: "Interest: high",
+            .devoted: "Interest: committed",
+            .eternal: "Interest: permanent",
+        ],
+        "meltdown": [
+            .newborn: "Ember",
+            .familiar: "Spark",
+            .settled: "Flame",
+            .bonded: "Bonfire",
+            .devoted: "Blaze",
+            .eternal: "Inferno",
+        ],
+        "dragon": [
+            .newborn: "…",
+            .familiar: "…seen",
+            .settled: "…known",
+            .bonded: "…trusted",
+            .devoted: "…chosen",
+            .eternal: "…bound",
+        ],
+        "slime": [
+            .newborn: ".",
+            .familiar: ".",
+            .settled: "..",
+            .bonded: "...",
+            .devoted: "....",
+            .eternal: ".....",
+        ],
+    ]
+
+    /// Return the character-voiced stage label. Falls back to the engineering
+    /// stage name (`.label`) if the character/stage pair isn't mapped —
+    /// which also means a custom future character never leaks "Bonded" as
+    /// long as it registers its own stage words.
+    public static func stageLabel(character: String, stage: EvolutionStage) -> String {
+        if let label = stageLabels[character]?[stage] { return label }
+        return stage.label
+    }
 }
