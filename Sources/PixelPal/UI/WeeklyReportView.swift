@@ -1,4 +1,5 @@
 import SwiftUI
+import PixelPalCore
 
 /// Weekly report card — pixel-art styled, one-click share.
 /// Shows work stats for the past 7 days with character identity.

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PixelPalCore
 
 /// Floating pixel character in screen corner — the primary visual presence.
 /// Click → expand session panel. Hover → 20% transparent + click-through.
@@ -90,9 +91,9 @@ final class FloatingCharacterController {
 
     // MARK: - Animation
 
-    func updateAnimation(characterId: String, state: CharacterState) {
+    func updateAnimation(characterId: String, state: CharacterState, evolution: EvolutionStage = .newborn) {
         let stateStr = state.rawValue
-        let newFrames = SpriteSheet.frames(character: characterId, state: stateStr)
+        let newFrames = SpriteSheet.frames(character: characterId, state: stateStr, evolution: evolution)
 
         // For the floating window, use larger sprites if available
         let largeFrames: [NSImage]

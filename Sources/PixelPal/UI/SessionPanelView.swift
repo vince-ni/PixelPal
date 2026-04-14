@@ -1,4 +1,5 @@
 import SwiftUI
+import PixelPalCore
 
 /// Session panel shown when clicking the menu bar icon or floating character.
 /// Lists all agent sessions with status, shows companion log, work stats.
@@ -6,8 +7,11 @@ struct SessionPanelView: View {
     @ObservedObject var sessionManager: SessionManager
     @ObservedObject var discoveryManager: DiscoveryManager
     @ObservedObject var workPatternStore: WorkPatternStore
+    @ObservedObject var workContext: WorkContext
     @ObservedObject var stateMachine: StateMachine
     let onTakeBreak: () -> Void
+    let onToggleMinimal: (Bool) -> Void
+    let onUninstall: () -> Void
     let onQuit: () -> Void
 
     @State private var showNewSession = false
@@ -81,30 +85,10 @@ struct SessionPanelView: View {
                 .padding(.horizontal, 12)
             }
 
-            // Work stats
-            HStack {
-                Image(systemName: "clock")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 11))
-                Text("Today: \(workPatternStore.todaySummary.totalWorkMinutes) min, \(workPatternStore.todaySummary.breakCount) breaks")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-
-            if !stateMachine.gitBranch.isEmpty {
-                HStack {
-                    Image(systemName: "arrow.triangle.branch")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 11))
-                    Text(stateMachine.gitBranch)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
+            // Work dashboard
+            workDashboard
                 .padding(.horizontal, 12)
-                .padding(.bottom, 6)
-            }
+                .padding(.vertical, 6)
 
             // New session button
             Button(action: { showNewSession = true }) {
@@ -131,7 +115,7 @@ struct SessionPanelView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.name)
                     .font(.system(size: 12, weight: .medium))
-                Text("\(session.provider) · \(session.elapsedMinutes) min")
+                Text("\(ProviderRegistry.adapter(for: session.provider)?.displayName ?? session.provider) · \(session.elapsedMinutes) min")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
             }
@@ -158,11 +142,21 @@ struct SessionPanelView: View {
 
     private var companionsTab: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("\(discoveryManager.discovered.count)/\(DiscoveryManager.allCharacters.count) discovered")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
+            HStack {
+                Text("\(discoveryManager.discovered.count)/\(DiscoveryManager.allCharacters.count) discovered")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                Spacer()
+                #if DEBUG
+                Button("Unlock All") {
+                    discoveryManager.discoverAll()
+                }
+                .font(.system(size: 10))
+                .foregroundColor(.orange)
+                #endif
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
 
             ForEach(DiscoveryManager.allCharacters, id: \.id) { character in
                 companionRow(character)
@@ -190,7 +184,7 @@ struct SessionPanelView: View {
                 if isFound {
                     Text(character.name)
                         .font(.system(size: 12, weight: .medium))
-                    Text("Day \(discovery?.evolutionDays ?? 0) · \(character.style)")
+                    Text("Day \(discovery?.evolutionDays ?? 0) · \(EvolutionStage.from(days: discovery?.evolutionDays ?? 0).label) · \(character.style)")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 } else {
@@ -224,17 +218,110 @@ struct SessionPanelView: View {
 
     // MARK: - Footer
 
+    @State private var showUninstallConfirm = false
+    @State private var isMinimalMode = UserDefaults.standard.bool(forKey: "pixelpal_minimal_mode")
+
     private var footer: some View {
-        HStack {
-            Button("I took a break", action: onTakeBreak)
-                .font(.system(size: 11))
-            Spacer()
-            Button("Quit", action: onQuit)
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
+        VStack(spacing: 6) {
+            HStack {
+                Toggle("Minimal", isOn: $isMinimalMode)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .font(.system(size: 10))
+                    .onChange(of: isMinimalMode) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: "pixelpal_minimal_mode")
+                        onToggleMinimal(newValue)
+                    }
+                    .help("Hide floating character, keep menu bar icon only")
+                Spacer()
+                Button("I took a break", action: onTakeBreak)
+                    .font(.system(size: 11))
+            }
+            HStack {
+                Button("Uninstall") { showUninstallConfirm = true }
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .alert("Uninstall PixelPal?", isPresented: $showUninstallConfirm) {
+                        Button("Remove hooks only") { onUninstall() }
+                        Button("Cancel", role: .cancel) {}
+                    }
+                    message: {
+                        Text("This will remove all hooks from your shell and Claude Code config. Your character data will be kept.")
+                    }
+                Spacer()
+                Button("Quit", action: onQuit)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    // MARK: - Work Dashboard
+
+    private var workDashboard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Today's summary row
+            HStack(spacing: 12) {
+                dashStat(icon: "clock", value: formatHours(workPatternStore.todaySummary.totalWorkMinutes), label: "today")
+                dashStat(icon: "checkmark.circle", value: "\(workContext.todayCommits)", label: "commits")
+                dashStat(icon: "xmark.circle", value: "\(workContext.todayErrors)", label: "errors")
+                dashStat(icon: "cup.and.saucer", value: "\(workPatternStore.todaySummary.breakCount)", label: "breaks")
+            }
+
+            // Current context row
+            HStack(spacing: 6) {
+                if !workContext.currentBranch.isEmpty {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 9))
+                        Text("\(workContext.currentBranch)")
+                            .font(.system(size: 10, weight: .medium))
+                        Text("· \(workContext.branchMinutes)m")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                if workContext.isFlowState {
+                    HStack(spacing: 3) {
+                        Circle().fill(.green).frame(width: 5, height: 5)
+                        Text("flow · \(workContext.flowMinutes)m")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.green)
+                    }
+                } else if workContext.minutesSinceBreak > 0 {
+                    Text("break \(workContext.minutesSinceBreak)m ago")
+                        .font(.system(size: 10))
+                        .foregroundColor(workContext.minutesSinceBreak > 52 ? .orange : .secondary)
+                }
+            }
+        }
+    }
+
+    private func dashStat(icon: String, value: String, label: String) -> some View {
+        VStack(spacing: 1) {
+            HStack(spacing: 2) {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                Text(value)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            }
+            Text(label)
+                .font(.system(size: 8))
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func formatHours(_ minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+        let h = minutes / 60
+        let m = minutes % 60
+        return "\(h)h\(m > 0 ? "\(m)m" : "")"
     }
 
     // MARK: - Helpers
@@ -284,7 +371,13 @@ struct NewSessionView: View {
     @State private var workspace = ""
     @State private var enableRemote = false
 
-    let providers = ["claude-code", "codex", "aider"]
+    private var installedProviders: [ProviderAdapter] {
+        ProviderRegistry.installed
+    }
+
+    private var selectedAdapter: ProviderAdapter? {
+        ProviderRegistry.adapter(for: selectedProvider)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -292,7 +385,9 @@ struct NewSessionView: View {
                 .font(.headline)
 
             Picker("Provider", selection: $selectedProvider) {
-                ForEach(providers, id: \.self) { Text($0) }
+                ForEach(installedProviders, id: \.id) { provider in
+                    Text(provider.displayName).tag(provider.id)
+                }
             }
             .pickerStyle(.menu)
 
@@ -306,6 +401,8 @@ struct NewSessionView: View {
 
             Toggle("Enable Remote", isOn: $enableRemote)
                 .font(.system(size: 12))
+                .disabled(selectedAdapter?.supportsNativeRemote != true)
+                .help(selectedAdapter?.supportsNativeRemote == true ? "" : "This provider doesn't support native remote")
 
             HStack {
                 Spacer()

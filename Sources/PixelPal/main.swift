@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PixelPalCore
 
 // MARK: - Menu Bar Controller
 
@@ -13,6 +14,9 @@ final class MenuBarController: NSObject {
     private let reminderEngine: ReminderEngine
     private let bubbleController = BubbleWindowController()
     private let floatingCharacter = FloatingCharacterController()
+    private let evolutionEngine = EvolutionEngine()
+    private let workContext: WorkContext
+    private let speechEngine: SpeechEngine
     private var animationTimer: Timer?
     private var currentFrames: [NSImage] = []
     private var frameIndex = 0
@@ -25,12 +29,15 @@ final class MenuBarController: NSObject {
          sessionManager: SessionManager,
          discoveryManager: DiscoveryManager,
          workPatternStore: WorkPatternStore,
-         reminderEngine: ReminderEngine) {
+         reminderEngine: ReminderEngine,
+         workContext: WorkContext) {
         self.stateMachine = stateMachine
         self.sessionManager = sessionManager
         self.discoveryManager = discoveryManager
         self.workPatternStore = workPatternStore
         self.reminderEngine = reminderEngine
+        self.workContext = workContext
+        self.speechEngine = SpeechEngine(workContext: workContext, reminderEngine: reminderEngine)
         super.init()
         setupStatusItem()
         setupPanel()
@@ -52,10 +59,20 @@ final class MenuBarController: NSObject {
             sessionManager: sessionManager,
             discoveryManager: discoveryManager,
             workPatternStore: workPatternStore,
+            workContext: workContext,
             stateMachine: stateMachine,
             onTakeBreak: { [weak self] in
+                self?.speechEngine.userTookBreak()
                 self?.reminderEngine.recordBreak()
                 self?.workPatternStore.recordBreakTaken()
+                self?.hidePanel()
+            },
+            onToggleMinimal: { [weak self] minimal in
+                self?.floatingCharacter.setMinimalMode(minimal)
+            },
+            onUninstall: { [weak self] in
+                let configurator = AutoConfigurator()
+                configurator.unconfigure()
                 self?.hidePanel()
             },
             onQuit: {
@@ -81,6 +98,10 @@ final class MenuBarController: NSObject {
         floatingCharacter.setup()
         floatingCharacter.onClick = { [weak self] in
             self?.floatingCharacterClicked()
+        }
+        // Restore Minimal Mode preference
+        if UserDefaults.standard.bool(forKey: "pixelpal_minimal_mode") {
+            floatingCharacter.setMinimalMode(true)
         }
         // Initial animation
         let charId = discoveryManager.activeCharacter.id
@@ -142,13 +163,22 @@ final class MenuBarController: NSObject {
     // MARK: - State observation
 
     private func observeState() {
+        // Fast loop for animation state (0.3s)
         stateObserver = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.switchAnimation(to: self.stateMachine.state)
                 self.handleBubble()
-                self.handleReminder()
                 self.handleDiscovery()
+                self.handleEvolution()
+            }
+        }
+        // Slower loop for speech evaluation (5s) — SpeechEngine decides when to speak
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.workContext.resetIfNewDay()
+                self.evaluateSpeech()
             }
         }
     }
@@ -163,25 +193,30 @@ final class MenuBarController: NSObject {
         let characterId = discoveryManager.activeCharacter.id
         stateMachine.activeCharacterId = characterId
 
+        // Determine evolution stage for active character
+        let evolutionDays = discoveryManager.discovered
+            .first(where: { $0.characterId == characterId })?.evolutionDays ?? 0
+        let evoStage = EvolutionStage.from(days: evolutionDays)
+
         // Update floating character too
-        floatingCharacter.updateAnimation(characterId: characterId, state: state)
+        floatingCharacter.updateAnimation(characterId: characterId, state: state, evolution: evoStage)
 
         let interval: TimeInterval
         switch state {
         case .idle:
-            currentFrames = SpriteSheet.frames(character: characterId, state: "idle")
+            currentFrames = SpriteSheet.frames(character: characterId, state: "idle", evolution: evoStage)
             interval = 0.8
         case .working:
-            currentFrames = SpriteSheet.frames(character: characterId, state: "working")
+            currentFrames = SpriteSheet.frames(character: characterId, state: "working", evolution: evoStage)
             interval = 0.2
         case .celebrate:
-            currentFrames = SpriteSheet.frames(character: characterId, state: "celebrate")
+            currentFrames = SpriteSheet.frames(character: characterId, state: "celebrate", evolution: evoStage)
             interval = 0.15
         case .nudge:
-            currentFrames = SpriteSheet.frames(character: characterId, state: "nudge")
+            currentFrames = SpriteSheet.frames(character: characterId, state: "nudge", evolution: evoStage)
             interval = 0.6
         case .comfort:
-            currentFrames = SpriteSheet.frames(character: characterId, state: "idle")
+            currentFrames = SpriteSheet.frames(character: characterId, state: "idle", evolution: evoStage)
             interval = 1.0
         }
 
@@ -210,6 +245,7 @@ final class MenuBarController: NSObject {
             let char = discoveryManager.activeCharacter
             let emoji = emojiForState(stateMachine.state)
             bubbleController.show(text: stateMachine.bubbleText, emoji: emoji, characterName: char.name) { [weak self] in
+                self?.speechEngine.userDismissed()
                 self?.stateMachine.userDismissedBubble()
                 self?.isBubbleShowing = false
                 self?.bubbleController.dismiss()
@@ -220,18 +256,26 @@ final class MenuBarController: NSObject {
         }
     }
 
-    private func handleReminder() {
-        if let reminder = reminderEngine.currentReminder, !stateMachine.showBubble {
-            let charId = discoveryManager.activeCharacter.id
-            // Use character-specific speech if available
-            let context: SpeechPool.Context = switch reminder.layer {
-            case 1: .nudgeEye
-            case 2: .nudgeMicro
-            default: .nudgeDeep
+    // MARK: - SpeechEngine evaluation (replaces timer-based reminders)
+
+    private func evaluateSpeech() {
+        guard !stateMachine.showBubble else { return }
+        let charId = discoveryManager.activeCharacter.id
+
+        if let (trigger, text) = speechEngine.evaluate(characterId: charId, currentState: stateMachine.state) {
+            // Set appropriate animation state based on trigger
+            switch trigger {
+            case .nudgeEye, .nudgeMicro, .nudgeDeep, .lateNight:
+                stateMachine.state = .nudge
+                workPatternStore.recordReminderSuggested()
+            case .errorStreak:
+                stateMachine.state = .comfort
+            case .taskComplete, .milestone, .flowExit:
+                stateMachine.state = .celebrate
+            case .flowEntry, .returnFromAbsence, .branchSwitch, .claudeNeedsYou:
+                break // keep current state
             }
-            let text = SpeechPool.line(character: charId, context: context) ?? reminder.message
             stateMachine.showReminderBubble(text)
-            workPatternStore.recordReminderSuggested()
         }
     }
 
@@ -242,6 +286,19 @@ final class MenuBarController: NSObject {
                 stateMachine.state = .celebrate
                 stateMachine.showDiscoveryBubble(greeting, characterName: profile.name)
             }
+        }
+    }
+
+    private func handleEvolution() {
+        let charId = discoveryManager.activeCharacter.id
+        guard let discovery = discoveryManager.discovered.first(where: { $0.characterId == charId }) else { return }
+
+        if let newStage = evolutionEngine.checkMilestone(characterId: charId, evolutionDays: discovery.evolutionDays) {
+            // Show evolution speech bubble
+            let text = SpeechPool.line(character: charId, context: .evolution(newStage.dayThreshold))
+                ?? "Day \(newStage.dayThreshold). Something feels different."
+            stateMachine.state = .celebrate
+            stateMachine.showDiscoveryBubble(text, characterName: discoveryManager.activeCharacter.name)
         }
     }
 
@@ -265,6 +322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var discoveryManager: DiscoveryManager?
     private var workPatternStore: WorkPatternStore?
     private var reminderEngine: ReminderEngine?
+    private var workContext: WorkContext?
     private var discoveryTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -273,12 +331,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let discovery = DiscoveryManager()
         let patterns = WorkPatternStore()
         let reminders = ReminderEngine()
+        let ctx = WorkContext()
 
         stateMachine = sm
         sessionManager = sessions
         discoveryManager = discovery
         workPatternStore = patterns
         reminderEngine = reminders
+        workContext = ctx
+
+        // Wire WorkContext into StateMachine
+        sm.workContext = ctx
 
         // Socket server: receives shell hook + Claude hook events
         let server = SocketServer { event in
@@ -296,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         duration: event.duration ?? 0
                     )
                 case .claude_notify, .claude_stop:
-                    break // handled by state machine
+                    break // handled by state machine + speech engine
                 }
             }
         }
@@ -319,7 +382,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sessionManager: sessions,
             discoveryManager: discovery,
             workPatternStore: patterns,
-            reminderEngine: reminders
+            reminderEngine: reminders,
+            workContext: ctx
         )
 
         // Periodic discovery evaluation (every 5 minutes)
@@ -334,6 +398,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         print("[PixelPal] Running. Character: \(discovery.activeCharacter.name). Discovered: \(discovery.discovered.count)/\(DiscoveryManager.allCharacters.count)")
+
+        // First-launch hint: remind user to open a new terminal
+        showShellHookHintIfNeeded(sm: sm, charId: discovery.activeCharacter.id)
+    }
+
+    /// Show a one-time hint to open a new terminal so shell hooks activate.
+    /// Only shows if no shell events received within 10 seconds of launch.
+    private func showShellHookHintIfNeeded(sm: StateMachine, charId: String) {
+        let hintKey = "pixelpal_shell_hint_shown"
+        // Only show once per install
+        guard !UserDefaults.standard.bool(forKey: hintKey) else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let ctx = self?.workContext else { return }
+            // If no activity detected, the hook isn't loaded
+            if ctx.commandVelocity == 0 && ctx.todayCommits == 0 {
+                let isCN = SpeechPool.isChinese
+                let text = isCN
+                    ? "打开一个新的终端窗口，我就能感知你的工作状态了。"
+                    : "Open a new terminal window so I can track your work."
+                sm.showReminderBubble(text)
+                UserDefaults.standard.set(true, forKey: hintKey)
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

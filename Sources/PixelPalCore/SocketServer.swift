@@ -1,13 +1,13 @@
 import Foundation
 
-final class SocketServer {
+public final class SocketServer {
     private let socketPath: String
     private var fileHandle: FileHandle?
     private var serverSocket: Int32 = -1
     private var running = false
-    let onEvent: @Sendable (ShellEvent) -> Void
+    public let onEvent: @Sendable (ShellEvent) -> Void
 
-    init(onEvent: @escaping @Sendable (ShellEvent) -> Void) {
+    public init(onEvent: @escaping @Sendable (ShellEvent) -> Void) {
         let tmpDir = ProcessInfo.processInfo.environment["XDG_RUNTIME_DIR"]
             ?? ProcessInfo.processInfo.environment["TMPDIR"]
             ?? "/tmp"
@@ -15,7 +15,7 @@ final class SocketServer {
         self.onEvent = onEvent
     }
 
-    func start() {
+    public func start() {
         cleanup()
 
         serverSocket = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -63,7 +63,7 @@ final class SocketServer {
         }
     }
 
-    func stop() {
+    public func stop() {
         running = false
         if serverSocket >= 0 { close(serverSocket); serverSocket = -1 }
         cleanup()

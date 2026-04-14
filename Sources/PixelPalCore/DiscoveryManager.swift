@@ -2,33 +2,42 @@ import Foundation
 
 /// Manages character discovery conditions and companion log state.
 /// Characters "come to you" based on your work journey — not purchased or randomly drawn.
-struct CharacterProfile {
-    let id: String
-    let name: String
-    let species: String
-    let style: String              // Simple / Expressive / Complex / Enigmatic
-    let hint: String               // shown in companion log before discovery
-    let greeting: String           // first words when discovered
+public struct CharacterProfile {
+    public let id: String
+    public let name: String
+    public let species: String
+    public let style: String              // Simple / Expressive / Complex / Enigmatic
+    public let hint: String               // shown in companion log before discovery
+    public let greeting: String           // first words when discovered
+
+    public init(id: String, name: String, species: String, style: String, hint: String, greeting: String) {
+        self.id = id
+        self.name = name
+        self.species = species
+        self.style = style
+        self.hint = hint
+        self.greeting = greeting
+    }
 
     // Discovery condition is evaluated by DiscoveryManager, not stored here
 }
 
-struct DiscoveredCharacter: Codable {
-    let characterId: String
-    var discoveredAt: Date
-    var evolutionDays: Int         // cumulative days since discovery
-    var lastSeenDate: String       // YYYY-MM-DD, for counting unique days
-    var isActive: Bool             // currently selected as companion
+public struct DiscoveredCharacter: Codable {
+    public let characterId: String
+    public var discoveredAt: Date
+    public var evolutionDays: Int         // cumulative days since discovery
+    public var lastSeenDate: String       // YYYY-MM-DD, for counting unique days
+    public var isActive: Bool             // currently selected as companion
 }
 
 @MainActor
-final class DiscoveryManager: ObservableObject {
-    @Published private(set) var discovered: [DiscoveredCharacter] = []
+public final class DiscoveryManager: ObservableObject {
+    @Published public private(set) var discovered: [DiscoveredCharacter] = []
 
     private let persistencePath: String
 
     // All 9 characters defined
-    static let allCharacters: [CharacterProfile] = [
+    public static let allCharacters: [CharacterProfile] = [
         CharacterProfile(id: "spike", name: "Spike", species: "Hedgehog", style: "Simple",
                         hint: "Has been here from the start",
                         greeting: "Hi! I'm Spike. I'll keep you company!"),
@@ -60,7 +69,7 @@ final class DiscoveryManager: ObservableObject {
 
     private var cloudSync: CloudSync?
 
-    init() {
+    public init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let pixelpalDir = appSupport.appendingPathComponent("PixelPal", isDirectory: true)
         try? FileManager.default.createDirectory(at: pixelpalDir, withIntermediateDirectories: true)
@@ -93,11 +102,17 @@ final class DiscoveryManager: ObservableObject {
         }
     }
 
+    /// Test-only init: uses a temp path, skips cloud sync, starts fresh.
+    public init(testPersistencePath: String) {
+        persistencePath = testPersistencePath
+        ensureSpikeExists()
+    }
+
     // MARK: - Discovery checks
 
     /// Called periodically to evaluate discovery conditions.
     /// workStats provides the data needed to check conditions.
-    func evaluateDiscoveries(workStats: WorkStats) {
+    public func evaluateDiscoveries(workStats: WorkStats) {
         let today = dateString(Date())
 
         // Spike: always present (Day 1)
@@ -156,12 +171,22 @@ final class DiscoveryManager: ObservableObject {
 
     // MARK: - Character access
 
-    var activeCharacter: CharacterProfile {
+    public var activeCharacter: CharacterProfile {
         let activeId = discovered.first(where: { $0.isActive })?.characterId ?? "spike"
         return Self.allCharacters.first(where: { $0.id == activeId }) ?? Self.allCharacters[0]
     }
 
-    func setActive(_ characterId: String) {
+    /// Debug: discover all characters at once. For testing only.
+    public func discoverAll() {
+        for character in Self.allCharacters where !isDiscovered(character.id) {
+            discover(character.id)
+        }
+        // Consume all pending so they don't all trigger animations at once
+        pendingDiscovery = nil
+        saveDiscoveries()
+    }
+
+    public func setActive(_ characterId: String) {
         guard isDiscovered(characterId) else { return }
         for i in discovered.indices {
             discovered[i].isActive = (discovered[i].characterId == characterId)
@@ -169,19 +194,19 @@ final class DiscoveryManager: ObservableObject {
         saveDiscoveries()
     }
 
-    func isDiscovered(_ characterId: String) -> Bool {
+    public func isDiscovered(_ characterId: String) -> Bool {
         discovered.contains(where: { $0.characterId == characterId })
     }
 
-    func profile(for characterId: String) -> CharacterProfile? {
+    public func profile(for characterId: String) -> CharacterProfile? {
         Self.allCharacters.first(where: { $0.id == characterId })
     }
 
     /// Returns newly discovered character ID if a discovery just happened, nil otherwise.
     /// Used by the UI to trigger discovery animation.
-    var pendingDiscovery: String? = nil
+    public var pendingDiscovery: String? = nil
 
-    func consumePendingDiscovery() -> String? {
+    public func consumePendingDiscovery() -> String? {
         let d = pendingDiscovery
         pendingDiscovery = nil
         return d
@@ -241,10 +266,18 @@ final class DiscoveryManager: ObservableObject {
 
 /// Work statistics used to evaluate discovery conditions.
 /// Accumulated by StateMachine and passed to DiscoveryManager.
-struct WorkStats: Codable {
-    var totalDaysUsed: Int = 0
-    var breaksTaken: Int = 0
-    var tasksCompleted: Int = 0        // claude_stop events
-    var lateNightSessions: Int = 0     // work events between 00:00-05:00
-    var totalWorkMinutes: Int = 0
+public struct WorkStats: Codable {
+    public var totalDaysUsed: Int = 0
+    public var breaksTaken: Int = 0
+    public var tasksCompleted: Int = 0        // claude_stop events
+    public var lateNightSessions: Int = 0     // work events between 00:00-05:00
+    public var totalWorkMinutes: Int = 0
+
+    public init(totalDaysUsed: Int = 0, breaksTaken: Int = 0, tasksCompleted: Int = 0, lateNightSessions: Int = 0, totalWorkMinutes: Int = 0) {
+        self.totalDaysUsed = totalDaysUsed
+        self.breaksTaken = breaksTaken
+        self.tasksCompleted = tasksCompleted
+        self.lateNightSessions = lateNightSessions
+        self.totalWorkMinutes = totalWorkMinutes
+    }
 }

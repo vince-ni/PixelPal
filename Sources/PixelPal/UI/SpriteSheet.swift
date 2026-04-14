@@ -1,4 +1,5 @@
 import AppKit
+import PixelPalCore
 
 /// Loads character sprites from Assets directory or falls back to SF Symbols.
 /// Supports: PNG (static), GIF/WebP (animated, frame extraction).
@@ -17,12 +18,18 @@ struct SpriteSheet {
         return candidates.last!
     }()
 
-    /// Load frames for a specific character and state.
-    /// Naming convention: {characterId}_{state}.gif or {characterId}_{state}.png
-    /// For non-idle states: falls back to SF Symbol, NOT to idle.png
-    /// For idle state: falls back to any base sprite
-    static func frames(character: String, state: String) -> [NSImage] {
-        // Try character-specific state asset first
+    /// Load frames for a specific character and state, with optional evolution variant.
+    /// Priority: {char}_{state}_{evo} → {char}_{state} → {state} → SF Symbol
+    /// For idle state: additional fallback to base character sprite
+    static func frames(character: String, state: String, evolution: EvolutionStage = .newborn) -> [NSImage] {
+        // Try evolution-specific asset first (e.g. spike_idle_evo2.gif)
+        if let suffix = evolution.spriteSuffix {
+            if let frames = loadFrames("\(character)_\(state)_\(suffix)"), !frames.isEmpty {
+                return frames
+            }
+        }
+
+        // Try character-specific state asset
         if let frames = loadFrames("\(character)_\(state)"), !frames.isEmpty {
             return frames
         }

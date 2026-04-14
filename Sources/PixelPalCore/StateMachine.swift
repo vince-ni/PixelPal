@@ -1,6 +1,6 @@
 import Foundation
 
-enum CharacterState: String {
+public enum CharacterState: String {
     case idle
     case working
     case celebrate
@@ -8,25 +8,35 @@ enum CharacterState: String {
     case comfort
 }
 
-struct ShellEvent {
-    enum Kind: String, Codable { case exec, prompt, claude_notify, claude_stop }
-    let kind: Kind
-    let timestamp: TimeInterval
-    let command: String?
-    let exitCode: Int?
-    let duration: Int?
-    let pwd: String?
-    let gitBranch: String?
+public struct ShellEvent {
+    public enum Kind: String, Codable { case exec, prompt, claude_notify, claude_stop }
+    public let kind: Kind
+    public let timestamp: TimeInterval
+    public let command: String?
+    public let exitCode: Int?
+    public let duration: Int?
+    public let pwd: String?
+    public let gitBranch: String?
+
+    public init(kind: Kind, timestamp: TimeInterval, command: String?, exitCode: Int?, duration: Int?, pwd: String?, gitBranch: String?) {
+        self.kind = kind
+        self.timestamp = timestamp
+        self.command = command
+        self.exitCode = exitCode
+        self.duration = duration
+        self.pwd = pwd
+        self.gitBranch = gitBranch
+    }
 }
 
 @MainActor
-final class StateMachine: ObservableObject {
-    @Published var state: CharacterState = .idle
-    @Published private(set) var workMinutes: Int = 0
-    @Published private(set) var gitBranch: String = ""
-    @Published var showBubble: Bool = false
-    @Published private(set) var bubbleText: String = ""
-    @Published private(set) var bubbleCharacterName: String = ""
+public final class StateMachine: ObservableObject {
+    @Published public var state: CharacterState = .idle
+    @Published public private(set) var workMinutes: Int = 0
+    @Published public private(set) var gitBranch: String = ""
+    @Published public var showBubble: Bool = false
+    @Published public private(set) var bubbleText: String = ""
+    @Published public private(set) var bubbleCharacterName: String = ""
 
     private var workStartTime: Date?
     private var lastBreakTime = Date()
@@ -37,26 +47,34 @@ final class StateMachine: ObservableObject {
     private var dismissWindowStart: Date?
     private var silentUntil: Date?
 
-    init() {
+    public init() {
         startWorkTimer()
     }
 
-    func handleEvent(_ event: ShellEvent) {
+    /// WorkContext receives the same events for aggregation
+    public var workContext: WorkContext?
+
+    public func handleEvent(_ event: ShellEvent) {
+        let timestamp = Date(timeIntervalSince1970: event.timestamp)
+
         switch event.kind {
         case .exec:
             debounceTimer?.invalidate()
             debounceTimer = nil
             state = .working
             if workStartTime == nil { workStartTime = Date() }
+            workContext?.recordExec(command: event.command ?? "", timestamp: timestamp)
 
         case .prompt:
-            if let exit = event.exitCode, exit != 0, let dur = event.duration, dur > 3 {
+            let exitCode = event.exitCode ?? 0
+            let duration = event.duration ?? 0
+            workContext?.recordPrompt(exitCode: exitCode, duration: duration, gitBranch: event.gitBranch, timestamp: timestamp)
+
+            if exitCode != 0 && duration > 3 {
                 state = .comfort
-                let text = SpeechPool.line(character: activeCharacterId, context: .comfort)
-                if let text { showBubbleMessage(text) }
+                // Speech now handled by SpeechEngine, not raw SpeechPool
                 scheduleTransition(to: .idle, after: 3.0)
             } else {
-                // 2-second debounce: don't go idle immediately
                 debounceTimer?.invalidate()
                 debounceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
                     Task { @MainActor in self?.state = .idle }
@@ -65,42 +83,23 @@ final class StateMachine: ObservableObject {
             if let git = event.gitBranch, !git.isEmpty { gitBranch = git }
             if let dur = event.duration { workMinutes += dur / 60 }
 
-            // Idle detection: if gap between prompts > 5 min, pause work timer
-            // (handled by workTimer checking last event time)
-            checkBreakReminders()
-
         case .claude_notify:
             let previousState = state
             state = .celebrate
             scheduleTransition(to: previousState == .working ? .working : .idle, after: 3.0)
-            let text = SpeechPool.line(character: activeCharacterId, context: .celebrate) ?? "Claude needs you!"
-            showBubbleMessage(text)
 
         case .claude_stop:
             state = .celebrate
-            let text = SpeechPool.line(character: activeCharacterId, context: .celebrate) ?? "Done!"
-            showBubbleMessage(text)
             scheduleTransition(to: .idle, after: 3.0)
         }
     }
 
     /// Set by MenuBarController to enable character-specific speech
-    var activeCharacterId: String = "spike"
+    public var activeCharacterId: String = "spike"
 
-    private func checkBreakReminders() {
-        guard canShowBubble() else { return }
-        let minutesSinceBreak = Int(Date().timeIntervalSince(lastBreakTime) / 60)
+    // Break reminders moved to SpeechEngine (context-aware, not timer-based)
 
-        if minutesSinceBreak >= 25 {
-            state = .nudge
-            showBubbleMessage(minutesSinceBreak >= 52
-                ? "Already \(minutesSinceBreak) min. Take a real break."
-                : "25 min in. Look away for 20 sec.")
-            scheduleTransition(to: .idle, after: 5.0)
-        }
-    }
-
-    func userDismissedBubble() {
+    public func userDismissedBubble() {
         showBubble = false
         let now = Date()
         if let start = dismissWindowStart, now.timeIntervalSince(start) < 300 {
@@ -116,7 +115,7 @@ final class StateMachine: ObservableObject {
         }
     }
 
-    func userTookBreak() {
+    public func userTookBreak() {
         lastBreakTime = Date()
         workMinutes = 0
     }
@@ -143,26 +142,22 @@ final class StateMachine: ObservableObject {
     }
 
     private func startWorkTimer() {
-        workTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                if self.state == .working || self.state == .idle {
-                    self.checkBreakReminders()
-                }
-            }
+        // Kept for work minute tracking; speech triggers moved to SpeechEngine
+        workTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            // Timer kept alive to maintain scheduling; SpeechEngine polls WorkContext
         }
     }
 
     // MARK: - Public bubble methods (used by MenuBarController)
 
-    func showReminderBubble(_ text: String) {
+    public func showReminderBubble(_ text: String) {
         guard canShowBubble() else { return }
         state = .nudge
         showBubbleMessage(text)
         scheduleTransition(to: .idle, after: 8.0)
     }
 
-    func showDiscoveryBubble(_ greeting: String, characterName: String) {
+    public func showDiscoveryBubble(_ greeting: String, characterName: String) {
         bubbleCharacterName = characterName
         showBubbleMessage(greeting)
     }

@@ -8,9 +8,9 @@ import Foundation
 /// Privacy: all data stays local. No command content, no file paths, no code.
 /// Only timing and outcome metadata.
 @MainActor
-final class WorkPatternStore: ObservableObject {
-    @Published private(set) var todaySummary: DailySummary
-    @Published private(set) var workStats: WorkStats
+public final class WorkPatternStore: ObservableObject {
+    @Published public private(set) var todaySummary: DailySummary
+    @Published public private(set) var workStats: WorkStats
 
     private var eventLog: [WorkEvent] = []
     private let dataDir: URL
@@ -24,20 +24,33 @@ final class WorkPatternStore: ObservableObject {
         let isLateNight: Bool      // 00:00-05:00
     }
 
-    struct DailySummary: Codable {
-        var date: String                 // YYYY-MM-DD
-        var totalWorkMinutes: Int = 0
-        var breakCount: Int = 0
-        var breakComplianceRate: Double = 0  // breaks taken / breaks suggested
-        var lateNightSessions: Int = 0
-        var longestContinuousStreak: Int = 0 // minutes
-        var sessionCount: Int = 0        // number of exec events
-        var tasksCompleted: Int = 0      // prompt events with exit=0
-        var remindersSuggested: Int = 0
-        var remindersTaken: Int = 0
+    public struct DailySummary: Codable {
+        public var date: String                 // YYYY-MM-DD
+        public var totalWorkMinutes: Int = 0
+        public var breakCount: Int = 0
+        public var breakComplianceRate: Double = 0  // breaks taken / breaks suggested
+        public var lateNightSessions: Int = 0
+        public var longestContinuousStreak: Int = 0 // minutes
+        public var sessionCount: Int = 0        // number of exec events
+        public var tasksCompleted: Int = 0      // prompt events with exit=0
+        public var remindersSuggested: Int = 0
+        public var remindersTaken: Int = 0
+
+        public init(date: String, totalWorkMinutes: Int = 0, breakCount: Int = 0, breakComplianceRate: Double = 0, lateNightSessions: Int = 0, longestContinuousStreak: Int = 0, sessionCount: Int = 0, tasksCompleted: Int = 0, remindersSuggested: Int = 0, remindersTaken: Int = 0) {
+            self.date = date
+            self.totalWorkMinutes = totalWorkMinutes
+            self.breakCount = breakCount
+            self.breakComplianceRate = breakComplianceRate
+            self.lateNightSessions = lateNightSessions
+            self.longestContinuousStreak = longestContinuousStreak
+            self.sessionCount = sessionCount
+            self.tasksCompleted = tasksCompleted
+            self.remindersSuggested = remindersSuggested
+            self.remindersTaken = remindersTaken
+        }
     }
 
-    init() {
+    public init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         dataDir = appSupport.appendingPathComponent("PixelPal/patterns", isDirectory: true)
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
@@ -53,7 +66,7 @@ final class WorkPatternStore: ObservableObject {
 
     // MARK: - Record events
 
-    func recordExec(timestamp: Date) {
+    public func recordExec(timestamp: Date) {
         let isLate = isLateNight(timestamp)
         let event = WorkEvent(timestamp: timestamp, type: "exec", duration: nil, exitCode: nil, isLateNight: isLate)
         eventLog.append(event)
@@ -65,7 +78,7 @@ final class WorkPatternStore: ObservableObject {
         save()
     }
 
-    func recordPrompt(timestamp: Date, exitCode: Int, duration: Int) {
+    public func recordPrompt(timestamp: Date, exitCode: Int, duration: Int) {
         let event = WorkEvent(timestamp: timestamp, type: "prompt", duration: duration, exitCode: exitCode, isLateNight: isLateNight(timestamp))
         eventLog.append(event)
         todaySummary.totalWorkMinutes += duration / 60
@@ -85,7 +98,7 @@ final class WorkPatternStore: ObservableObject {
         save()
     }
 
-    func recordBreakTaken() {
+    public func recordBreakTaken() {
         let event = WorkEvent(timestamp: Date(), type: "break_taken", duration: nil, exitCode: nil, isLateNight: false)
         eventLog.append(event)
         todaySummary.breakCount += 1
@@ -95,7 +108,7 @@ final class WorkPatternStore: ObservableObject {
         save()
     }
 
-    func recordBreakSkipped() {
+    public func recordBreakSkipped() {
         let event = WorkEvent(timestamp: Date(), type: "break_skipped", duration: nil, exitCode: nil, isLateNight: false)
         eventLog.append(event)
         todaySummary.remindersSuggested += 1
@@ -103,27 +116,31 @@ final class WorkPatternStore: ObservableObject {
         save()
     }
 
-    func recordReminderSuggested() {
+    public func recordReminderSuggested() {
         todaySummary.remindersSuggested += 1
         updateComplianceRate()
         save()
     }
 
-    func recordDayUsed() {
+    public func recordDayUsed() {
         let today = Self.dateString(Date())
         if todaySummary.date != today {
             // New day — archive yesterday, start fresh
             saveDailySummary(todaySummary)
             todaySummary = DailySummary(date: today)
             eventLog = []
+            // Only increment on actual new calendar day
+            workStats.totalDaysUsed += 1
+        } else if workStats.totalDaysUsed == 0 {
+            // First ever launch
+            workStats.totalDaysUsed = 1
         }
-        workStats.totalDaysUsed += 1
         save()
     }
 
     // MARK: - Weekly report data
 
-    func weekSummaries(count: Int = 7) -> [DailySummary] {
+    public func weekSummaries(count: Int = 7) -> [DailySummary] {
         var summaries: [DailySummary] = []
         let cal = Calendar.current
         for dayOffset in (0..<count).reversed() {
@@ -136,7 +153,7 @@ final class WorkPatternStore: ObservableObject {
         return summaries
     }
 
-    func weekReport() -> WeekReport {
+    public func weekReport() -> WeekReport {
         let summaries = weekSummaries()
         return WeekReport(
             totalWorkMinutes: summaries.reduce(0) { $0 + $1.totalWorkMinutes },
@@ -149,16 +166,16 @@ final class WorkPatternStore: ObservableObject {
         )
     }
 
-    struct WeekReport {
-        let totalWorkMinutes: Int
-        let totalBreaks: Int
-        let avgBreakCompliance: Double
-        let lateNightCount: Int
-        let longestStreak: Int
-        let tasksCompleted: Int
-        let daysActive: Int
+    public struct WeekReport {
+        public let totalWorkMinutes: Int
+        public let totalBreaks: Int
+        public let avgBreakCompliance: Double
+        public let lateNightCount: Int
+        public let longestStreak: Int
+        public let tasksCompleted: Int
+        public let daysActive: Int
 
-        var totalWorkHours: Double { Double(totalWorkMinutes) / 60.0 }
+        public var totalWorkHours: Double { Double(totalWorkMinutes) / 60.0 }
     }
 
     // MARK: - Helpers
@@ -174,7 +191,7 @@ final class WorkPatternStore: ObservableObject {
         }
     }
 
-    static func dateString(_ date: Date) -> String {
+    public static func dateString(_ date: Date) -> String {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         return fmt.string(from: date)

@@ -1,39 +1,39 @@
 import Foundation
 
-enum SessionStatus: String, Codable {
+public enum SessionStatus: String, Codable {
     case idle
     case running
     case error
     case stopped
 }
 
-struct AgentSession: Identifiable, Codable {
-    let id: UUID
-    var provider: String           // "claude-code", "codex", "aider"
-    var workspace: String          // directory path
-    var name: String               // display name (auto-generated or user-set)
-    var status: SessionStatus
-    var isRemote: Bool
-    var remoteURL: String?
-    var startedAt: Date
-    var lastHeartbeat: Date
-    var restartCount: Int
-    var pid: Int32?
+public struct AgentSession: Identifiable, Codable {
+    public let id: UUID
+    public var provider: String           // "claude-code", "codex", "aider"
+    public var workspace: String          // directory path
+    public var name: String               // display name (auto-generated or user-set)
+    public var status: SessionStatus
+    public var isRemote: Bool
+    public var remoteURL: String?
+    public var startedAt: Date
+    public var lastHeartbeat: Date
+    public var restartCount: Int
+    public var pid: Int32?
 
-    var elapsedMinutes: Int {
+    public var elapsedMinutes: Int {
         Int(Date().timeIntervalSince(startedAt) / 60)
     }
 }
 
 @MainActor
-final class SessionManager: ObservableObject {
-    @Published private(set) var sessions: [AgentSession] = []
+public final class SessionManager: ObservableObject {
+    @Published public private(set) var sessions: [AgentSession] = []
 
     private let maxRestarts = 3
     private var healthCheckTimer: Timer?
     private let persistencePath: String
 
-    init() {
+    public init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let pixelpalDir = appSupport.appendingPathComponent("PixelPal", isDirectory: true)
         try? FileManager.default.createDirectory(at: pixelpalDir, withIntermediateDirectories: true)
@@ -45,7 +45,7 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Session lifecycle
 
-    func createSession(provider: String, workspace: String, remote: Bool = false) {
+    public func createSession(provider: String, workspace: String, remote: Bool = false) {
         let session = AgentSession(
             id: UUID(),
             provider: provider,
@@ -64,14 +64,14 @@ final class SessionManager: ObservableObject {
         saveSessions()
     }
 
-    func stopSession(_ id: UUID) {
+    public func stopSession(_ id: UUID) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         killProcess(at: idx)
         sessions[idx].status = .stopped
         saveSessions()
     }
 
-    func removeSession(_ id: UUID) {
+    public func removeSession(_ id: UUID) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         killProcess(at: idx)
         sessions.remove(at: idx)
@@ -84,27 +84,13 @@ final class SessionManager: ObservableObject {
         guard index < sessions.count else { return }
         let session = sessions[index]
 
-        let process = Process()
-        process.currentDirectoryURL = URL(fileURLWithPath: session.workspace)
-
-        switch session.provider {
-        case "claude-code":
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            var args = ["claude"]
-            if session.isRemote { args.append("--remote") }
-            process.arguments = args
-
-        case "codex":
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["codex", "--cwd", session.workspace]
-
-        case "aider":
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["aider"]
-
-        default:
+        guard let adapter = ProviderRegistry.adapter(for: session.provider) else {
+            print("[PixelPal] Unknown provider: \(session.provider)")
+            sessions[index].status = .error
             return
         }
+
+        let process = adapter.buildProcess(workspace: session.workspace, remote: session.isRemote)
 
         // Redirect stdout/stderr to /dev/null for background sessions
         process.standardOutput = FileHandle.nullDevice
@@ -199,7 +185,7 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Aggregate state for character
 
-    var aggregateState: CharacterState {
+    public var aggregateState: CharacterState {
         if sessions.isEmpty { return .idle }
         if sessions.contains(where: { $0.status == .error }) { return .comfort }
         if sessions.contains(where: { $0.status == .running }) { return .working }

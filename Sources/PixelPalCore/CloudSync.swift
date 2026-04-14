@@ -8,14 +8,14 @@ import Foundation
 /// Write: L1 + L2 + L3 simultaneously
 /// Read: L1 first, L2 if L1 missing, L3 if L2 missing
 @MainActor
-final class CloudSync {
+public final class CloudSync {
 
     private let iCloudStore = NSUbiquitousKeyValueStore.default
     private let iCloudKey = "pixelpal_discoveries"
     private let d1BaseURL: String
     private var deviceId: String
 
-    init() {
+    public init() {
         // D1 backend URL (empty = disabled until deployed)
         d1BaseURL = ProcessInfo.processInfo.environment["PIXELPAL_API_URL"]
             ?? "https://pixelpal-api.your-subdomain.workers.dev"

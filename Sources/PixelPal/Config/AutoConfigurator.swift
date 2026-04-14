@@ -57,7 +57,16 @@ final class AutoConfigurator {
     func unconfigure() {
         removeClaudeHooks()
         removeShellHook()
+        removeLaunchAgent()
         print("[PixelPal] All hooks removed")
+    }
+
+    /// Full uninstall: hooks + data + preferences.
+    func fullUninstall() {
+        unconfigure()
+        removeAppData()
+        removePreferences()
+        print("[PixelPal] Full uninstall complete")
     }
 
     // MARK: - Detection
@@ -247,5 +256,46 @@ final class AutoConfigurator {
         }
         content = filtered.joined(separator: "\n")
         try? content.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - LaunchAgent cleanup
+
+    private func removeLaunchAgent() {
+        let launchAgentsDir = (homeDir as NSString).appendingPathComponent("Library/LaunchAgents")
+        let plistPath = (launchAgentsDir as NSString).appendingPathComponent("com.pixelpal.app.plist")
+
+        if FileManager.default.fileExists(atPath: plistPath) {
+            // Unload before removing
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            process.arguments = ["unload", plistPath]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try? process.run()
+            process.waitUntilExit()
+
+            try? FileManager.default.removeItem(atPath: plistPath)
+            print("[PixelPal] LaunchAgent removed")
+        }
+    }
+
+    // MARK: - App data cleanup
+
+    private func removeAppData() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let pixelpalDir = appSupport.appendingPathComponent("PixelPal")
+        if FileManager.default.fileExists(atPath: pixelpalDir.path) {
+            try? FileManager.default.removeItem(at: pixelpalDir)
+            print("[PixelPal] App data removed")
+        }
+    }
+
+    private func removePreferences() {
+        // Clear UserDefaults keys
+        let keys = ["pixelpal_float_x", "pixelpal_float_y"]
+        for key in keys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        print("[PixelPal] Preferences cleared")
     }
 }
