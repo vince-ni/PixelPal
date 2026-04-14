@@ -106,6 +106,24 @@ struct SpriteSheet {
         return output
     }
 
+    /// Black silhouette of the character sprite — used in Companion Log for
+    /// undiscovered characters. Preserves the sprite's alpha shape so each
+    /// character still has a distinct silhouette; paints the opaque pixels
+    /// in a translucent label color (adapts to light/dark mode).
+    static func silhouette(character: String, size: CGFloat = 28) -> NSImage? {
+        guard let avatar = avatar(character: character, size: size) else { return nil }
+        let output = NSImage(size: avatar.size)
+        output.lockFocus()
+        defer { output.unlockFocus() }
+        NSGraphicsContext.current?.imageInterpolation = .none
+        // Lay down the avatar so its alpha mask exists in the canvas.
+        avatar.draw(in: NSRect(origin: .zero, size: avatar.size))
+        // Paint solid color over the alpha mask only (source-atop composite).
+        NSColor.labelColor.withAlphaComponent(0.35).setFill()
+        NSRect(origin: .zero, size: avatar.size).fill(using: .sourceAtop)
+        return output
+    }
+
     /// Scale sprite to menu bar height with nearest-neighbor (pixel-crisp on Retina).
     static func menuBarIcon(from source: NSImage) -> NSImage {
         let targetHeight: CGFloat = 22

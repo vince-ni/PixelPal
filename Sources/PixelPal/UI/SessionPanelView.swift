@@ -248,17 +248,11 @@ struct SessionPanelView: View {
 
     private func companionRow(_ character: CharacterProfile) -> some View {
         let isFound = discoveryManager.isDiscovered(character.id)
+        let isActive = discoveryManager.discovered.first(where: { $0.characterId == character.id })?.isActive == true
         let discovery = discoveryManager.discovered.first(where: { $0.characterId == character.id })
 
-        return HStack(spacing: 8) {
-            if isFound {
-                Text(emojiFor(character.species))
-                    .font(.system(size: 16))
-            } else {
-                Text("▓▓")
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary.opacity(0.3))
-            }
+        return HStack(spacing: 10) {
+            companionSprite(character: character, isFound: isFound, isActive: isActive)
 
             VStack(alignment: .leading, spacing: 1) {
                 if isFound {
@@ -279,21 +273,50 @@ struct SessionPanelView: View {
             }
 
             Spacer()
-
-            if isFound && discovery?.isActive == true {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.system(size: 12))
-            } else if isFound {
-                Button(action: { discoveryManager.setActive(character.id) }) {
-                    Text("Use")
-                        .font(.system(size: 10))
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(.plain)
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 4)
+        .onTapGesture {
+            // Tap-to-activate: only discovered, not-already-active characters.
+            if isFound && !isActive {
+                discoveryManager.setActive(character.id)
             }
         }
-        .padding(.vertical, 3)
+    }
+
+    /// Character sprite cell for the companion row.
+    /// - Discovered + active: full color sprite inside an accent glow ring.
+    /// - Discovered + inactive: full color sprite, no ring (tap to activate).
+    /// - Undiscovered: black silhouette of the sprite shape — hint of identity.
+    @ViewBuilder
+    private func companionSprite(character: CharacterProfile, isFound: Bool, isActive: Bool) -> some View {
+        ZStack {
+            if isActive {
+                Circle()
+                    .stroke(Color.accentColor, lineWidth: 1.5)
+                    .background(Circle().fill(Color.accentColor.opacity(0.12)))
+                    .frame(width: 32, height: 32)
+                    .shadow(color: .accentColor.opacity(0.5), radius: 4)
+            }
+            if isFound {
+                if let sprite = SpriteSheet.avatar(character: character.id, size: 26) {
+                    Image(nsImage: sprite).interpolation(.none)
+                } else {
+                    Image(systemName: "pawprint.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                if let shadow = SpriteSheet.silhouette(character: character.id, size: 26) {
+                    Image(nsImage: shadow).interpolation(.none)
+                } else {
+                    Image(systemName: "questionmark")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary.opacity(0.35))
+                }
+            }
+        }
+        .frame(width: 32, height: 32)
     }
 
     // MARK: - Settings state
@@ -494,20 +517,6 @@ struct SessionPanelView: View {
         }
     }
 
-    private func emojiFor(_ species: String) -> String {
-        switch species {
-        case "Hedgehog": return "🦔"
-        case "Cheetah": return "🐆"
-        case "Golden Retriever": return "🐕"
-        case "Owl": return "🦉"
-        case "Turtle": return "🐢"
-        case "Fox": return "🦊"
-        case "Phoenix": return "🔥"
-        case "Dragon": return "🐉"
-        case "Slime": return "🫧"
-        default: return "❓"
-        }
-    }
 }
 
 // MARK: - New Session View
