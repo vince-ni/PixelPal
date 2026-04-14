@@ -408,4 +408,92 @@ public struct SpeechPool {
             Line(en: ".", cn: "。", context: .idle),
         ],
     ]
+
+    // MARK: - State labels (short, UI-facing, character-voiced)
+
+    /// Per-character, per-state labels shown in the panel header instead of
+    /// engineering rawValues. Kept short (under ~20 chars) so the header
+    /// stays one line at the default panel width.
+    ///
+    /// Indexed: character id → CharacterState.rawValue → label.
+    /// Missing entries fall back to a neutral phrasing in `stateLabel(...)`.
+    private static let stateLabels: [String: [String: String]] = [
+        "spike": [
+            "idle":      "Here for you",
+            "working":   "You've got this!!",
+            "celebrate": "YES!! Another one!!",
+            "nudge":     "Hey!! Take care!!",
+            "comfort":   "It's okay!!",
+        ],
+        "dash": [
+            "idle":      "Keeping distance",
+            "working":   "Observing",
+            "celebrate": "...not bad",
+            "nudge":     "...you should stop",
+            "comfort":   "...it happens",
+        ],
+        "badge": [
+            "idle":      "Analyzing baseline",
+            "working":   "Tracking: active",
+            "celebrate": "Completion logged",
+            "nudge":     "Threshold reached",
+            "comfort":   "Setback: noted",
+        ],
+        "ramble": [
+            "idle":      "Just thinking...",
+            "working":   "Watching, quietly",
+            "celebrate": "Speaking of done...",
+            "nudge":     "Owls need rest too!",
+            "comfort":   "Errors are learning!",
+        ],
+        "rush": [
+            "idle":      "Waiting. Impatiently.",
+            "working":   "KEEP GOING!!",
+            "celebrate": "NEXT?? NEXT!!",
+            "nudge":     "STOP!! REST!!",
+            "comfort":   "UGH!! TRY AGAIN!!",
+        ],
+        "blunt": [
+            "idle":      "Standing by",
+            "working":   "Tracking output",
+            "celebrate": "Result: success",
+            "nudge":     "Observation: rest",
+            "comfort":   "Failure is data",
+        ],
+        "meltdown": [
+            "idle":      "Dormant",
+            "working":   "Heat rising…",
+            "celebrate": "IGNITION!!",
+            "nudge":     "Ember cooling",
+            "comfort":   "Rising from ashes",
+        ],
+        "dragon": [
+            "idle":      "…",
+            "working":   "…watching",
+            "celebrate": "…good",
+            "nudge":     "…stop",
+            "comfort":   "…",
+        ],
+        "slime": [
+            "idle":      ".",
+            "working":   ".",
+            "celebrate": "Done.",
+            "nudge":     "Rest.",
+            "comfort":   ".",
+        ],
+    ]
+
+    /// Return the character-voiced label for a given state. Falls back to
+    /// a neutral phrasing if the character/state pair isn't mapped.
+    public static func stateLabel(character: String, state: String) -> String {
+        if let label = stateLabels[character]?[state] { return label }
+        switch state {
+        case "idle":      return "Here"
+        case "working":   return "Watching you work"
+        case "celebrate": return "Nice one"
+        case "nudge":     return "Looking out for you"
+        case "comfort":   return "Right here with you"
+        default:          return state
+        }
+    }
 }

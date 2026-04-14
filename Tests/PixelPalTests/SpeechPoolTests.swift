@@ -27,6 +27,33 @@ struct SpeechPoolTests {
         }
     }
 
+    @Test("Every character has a state label for every core state")
+    func stateLabelsCovered() {
+        let characters = ["spike", "dash", "badge", "ramble", "rush", "blunt", "meltdown", "dragon", "slime"]
+        let states = ["idle", "working", "celebrate", "nudge", "comfort"]
+        for char in characters {
+            for state in states {
+                let label = SpeechPool.stateLabel(character: char, state: state)
+                #expect(!label.isEmpty, "Character '\(char)' has empty state label for '\(state)'")
+            }
+        }
+    }
+
+    @Test("Unknown character falls back to neutral state labels, not rawValue leak")
+    func unknownCharacterStateFallback() {
+        #expect(SpeechPool.stateLabel(character: "ghost", state: "idle") == "Here")
+        #expect(SpeechPool.stateLabel(character: "ghost", state: "working") == "Watching you work")
+        #expect(SpeechPool.stateLabel(character: "ghost", state: "nudge") == "Looking out for you")
+    }
+
+    @Test("Known character returns character-voiced label, not neutral fallback")
+    func spikeLabelDistinct() {
+        let spikeIdle = SpeechPool.stateLabel(character: "spike", state: "idle")
+        let neutralIdle = SpeechPool.stateLabel(character: "ghost", state: "idle")
+        #expect(spikeIdle != neutralIdle)
+        #expect(spikeIdle.contains("Here for"))
+    }
+
     @Test("Unknown character returns nil")
     func unknownCharacter() {
         let line = SpeechPool.line(character: "nonexistent", context: .celebrate)

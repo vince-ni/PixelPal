@@ -82,10 +82,15 @@ struct SessionPanelView: View {
     }
 
     private var headerSubtitle: String {
-        if activeEvolutionDays == 0 {
-            return activeStage.label
+        let dayFragment = activeEvolutionDays > 0 ? " · Day \(activeEvolutionDays)" : ""
+        // Idle → show the relationship (stage). Non-idle → show the moment
+        // (character-voiced state). The day count stays as continuity anchor.
+        if stateMachine.state == .idle {
+            return activeStage.label + dayFragment
         }
-        return "\(activeStage.label) · Day \(activeEvolutionDays)"
+        let label = SpeechPool.stateLabel(character: discoveryManager.activeCharacter.id,
+                                          state: stateMachine.state.rawValue)
+        return label + dayFragment
     }
 
     // MARK: - Settings menu (gear)
