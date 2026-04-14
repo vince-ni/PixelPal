@@ -80,6 +80,32 @@ struct SpriteSheet {
         return nil
     }
 
+    /// Load a character avatar at a specified size for in-panel display.
+    /// Tries the HD sprite ({char}_large.png) first — falls back to the
+    /// scaled menu-bar idle frame. Always nearest-neighbor for pixel crispness.
+    static func avatar(character: String, size: CGFloat = 32) -> NSImage? {
+        let largePath = (assetsDir as NSString).appendingPathComponent("\(character)_large.png")
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: largePath)),
+           let source = NSImage(data: data) {
+            return scaledAvatar(from: source, size: size)
+        }
+        if let first = frames(character: character, state: "idle").first {
+            return scaledAvatar(from: first, size: size)
+        }
+        return nil
+    }
+
+    private static func scaledAvatar(from source: NSImage, size: CGFloat) -> NSImage {
+        let target = NSSize(width: size, height: size)
+        let output = NSImage(size: target)
+        output.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .none
+        source.draw(in: NSRect(origin: .zero, size: target))
+        output.unlockFocus()
+        output.isTemplate = false
+        return output
+    }
+
     /// Scale sprite to menu bar height with nearest-neighbor (pixel-crisp on Retina).
     static func menuBarIcon(from source: NSImage) -> NSImage {
         let targetHeight: CGFloat = 22

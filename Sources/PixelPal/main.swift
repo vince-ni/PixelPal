@@ -77,12 +77,6 @@ final class MenuBarController: NSObject {
             workPatternStore: workPatternStore,
             workContext: workContext,
             stateMachine: stateMachine,
-            onTakeBreak: { [weak self] in
-                self?.speechEngine.userTookBreak()
-                self?.reminderEngine.recordBreak()
-                self?.workPatternStore.recordBreakTaken()
-                self?.hidePanel()
-            },
             onToggleMinimal: { [weak self] minimal in
                 self?.floatingCharacter.setMinimalMode(minimal)
             },

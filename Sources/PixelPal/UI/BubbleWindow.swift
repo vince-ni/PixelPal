@@ -88,13 +88,6 @@ struct BubbleView: View {
             }
 
             Spacer(minLength: 4)
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .foregroundColor(.secondary.opacity(0.6))
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -104,5 +97,6 @@ struct BubbleView: View {
                 .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
         )
         .frame(width: 280)
+        .onTapGesture { onDismiss() } // tap anywhere on bubble to dismiss
     }
 }

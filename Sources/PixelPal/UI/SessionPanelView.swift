@@ -9,7 +9,6 @@ struct SessionPanelView: View {
     @ObservedObject var workPatternStore: WorkPatternStore
     @ObservedObject var workContext: WorkContext
     @ObservedObject var stateMachine: StateMachine
-    let onTakeBreak: () -> Void
     let onToggleMinimal: (Bool) -> Void
     let onUninstall: () -> Void
     let onQuit: () -> Void
@@ -38,29 +37,101 @@ struct SessionPanelView: View {
             } else {
                 companionsTab
             }
-
-            Divider()
-            footer
         }
         .frame(width: 280)
     }
 
-    // MARK: - Header
+    // MARK: - Header (character-first)
+
+    private var activeEvolutionDays: Int {
+        discoveryManager.discovered.first(where: { $0.isActive })?.evolutionDays ?? 0
+    }
+
+    private var activeStage: EvolutionStage {
+        EvolutionStage.from(days: activeEvolutionDays)
+    }
 
     private var header: some View {
-        HStack {
-            Text("PixelPal")
-                .font(.headline)
+        HStack(spacing: 10) {
+            if let avatar = SpriteSheet.avatar(character: discoveryManager.activeCharacter.id, size: 32) {
+                Image(nsImage: avatar)
+                    .interpolation(.none)
+                    .frame(width: 32, height: 32)
+            } else {
+                // Fallback: SF Symbol if no sprite on disk (running from source without Assets)
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.secondary)
+                    .frame(width: 32, height: 32)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(discoveryManager.activeCharacter.name)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(headerSubtitle)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+
             Spacer()
-            Circle()
-                .fill(stateColor)
-                .frame(width: 8, height: 8)
-            Text(stateMachine.state.rawValue)
-                .font(.caption)
-                .foregroundColor(.secondary)
+
+            settingsMenu
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var headerSubtitle: String {
+        if activeEvolutionDays == 0 {
+            return activeStage.label
+        }
+        return "\(activeStage.label) · Day \(activeEvolutionDays)"
+    }
+
+    // MARK: - Settings menu (gear)
+
+    private var settingsMenu: some View {
+        Menu {
+            Button(action: { showPhoneSettings = true }) {
+                Label(
+                    ntfyEnabled ? "Phone notifications — on" : "Phone notifications…",
+                    systemImage: ntfyEnabled ? "iphone.radiowaves.left.and.right" : "iphone"
+                )
+            }
+            Toggle(isOn: $isMinimalMode) {
+                Label("Minimal mode", systemImage: "rectangle.topthird.inset.filled")
+            }
+            .onChange(of: isMinimalMode) { _, newValue in
+                UserDefaults.standard.set(newValue, forKey: "pixelpal_minimal_mode")
+                onToggleMinimal(newValue)
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                showUninstallConfirm = true
+            } label: {
+                Label("Uninstall hooks…", systemImage: "trash")
+            }
+            Button(action: onQuit) {
+                Label("Quit PixelPal", systemImage: "power")
+            }
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .frame(width: 22, height: 22)
+        .alert("Uninstall PixelPal?", isPresented: $showUninstallConfirm) {
+            Button("Remove hooks only", role: .destructive) { onUninstall() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove all hooks from your shell and Claude Code config. Your character data is kept.")
+        }
+        .sheet(isPresented: $showPhoneSettings) { phoneSettingsSheet }
     }
 
     // MARK: - Sessions Tab
@@ -217,7 +288,7 @@ struct SessionPanelView: View {
         .padding(.vertical, 3)
     }
 
-    // MARK: - Footer
+    // MARK: - Settings state
 
     @State private var showUninstallConfirm = false
     @State private var isMinimalMode = UserDefaults.standard.bool(forKey: "pixelpal_minimal_mode")
@@ -226,61 +297,24 @@ struct SessionPanelView: View {
     @State private var ntfyTopic = UserDefaults.standard.string(forKey: "pixelpal_ntfy_topic") ?? ""
     @State private var ntfyTestStatus: String = ""
 
-    private var footer: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Toggle("Minimal", isOn: $isMinimalMode)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .font(.system(size: 10))
-                    .onChange(of: isMinimalMode) { _, newValue in
-                        UserDefaults.standard.set(newValue, forKey: "pixelpal_minimal_mode")
-                        onToggleMinimal(newValue)
-                    }
-                    .help("Hide floating character, keep menu bar icon only")
-                Spacer()
-                Button(action: { showPhoneSettings.toggle() }) {
-                    Image(systemName: ntfyEnabled ? "iphone.radiowaves.left.and.right" : "iphone")
-                        .font(.system(size: 12))
-                        .foregroundColor(ntfyEnabled ? .blue : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Phone notifications")
-                Button("I took a break", action: onTakeBreak)
-                    .font(.system(size: 11))
-            }
-            if showPhoneSettings {
-                phoneSettingsSection
-            }
-            HStack {
-                Button("Uninstall") { showUninstallConfirm = true }
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .alert("Uninstall PixelPal?", isPresented: $showUninstallConfirm) {
-                        Button("Remove hooks only") { onUninstall() }
-                        Button("Cancel", role: .cancel) {}
-                    }
-                    message: {
-                        Text("This will remove all hooks from your shell and Claude Code config. Your character data will be kept.")
-                    }
-                Spacer()
-                Button("Quit", action: onQuit)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
+    // MARK: - Phone Settings Sheet
 
-    // MARK: - Phone Settings
+    private var phoneSettingsSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: ntfyEnabled ? "iphone.radiowaves.left.and.right" : "iphone")
+                    .font(.system(size: 18))
+                    .foregroundColor(ntfyEnabled ? .accentColor : .secondary)
+                Text("Phone notifications")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Button("Done") { showPhoneSettings = false }
+                    .keyboardShortcut(.cancelAction)
+            }
 
-    private var phoneSettingsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
             Toggle("Push to phone via ntfy", isOn: $ntfyEnabled)
                 .toggleStyle(.switch)
-                .controlSize(.mini)
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .onChange(of: ntfyEnabled) { _, newValue in
                     if newValue && ntfyTopic.isEmpty {
                         ntfyTopic = NtfyRemoteSink.generateTopic()
@@ -291,35 +325,35 @@ struct SessionPanelView: View {
                 }
 
             if ntfyEnabled {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Topic (keep secret — anyone with this can subscribe)")
-                        .font(.system(size: 9))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Topic — keep secret, anyone with this can subscribe")
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         Text(ntfyTopic)
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Spacer()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.secondary.opacity(0.1))
+                            .cornerRadius(5)
                         Button(action: copyTopicToPasteboard) {
                             Image(systemName: "doc.on.doc")
-                                .font(.system(size: 10))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.borderless)
                         .help("Copy topic")
                         Button(action: regenerateTopic) {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 10))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.borderless)
                         .help("Regenerate (old topic stops working)")
                     }
 
                     HStack {
-                        Button("Test push") {
+                        Button("Send test push") {
                             Task { await sendTestPush() }
                         }
-                        .font(.system(size: 10))
                         Spacer()
                         if !ntfyTestStatus.isEmpty {
                             Text(ntfyTestStatus)
@@ -327,15 +361,20 @@ struct SessionPanelView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+
                     Text("Install the ntfy app on your phone and subscribe to this topic.")
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
-                .padding(6)
-                .background(Color.secondary.opacity(0.08))
-                .cornerRadius(4)
+                .padding(10)
+                .background(.regularMaterial)
+                .cornerRadius(8)
             }
+
+            Spacer(minLength: 0)
         }
+        .padding(18)
+        .frame(width: 320, height: ntfyEnabled ? 280 : 160)
     }
 
     private func copyTopicToPasteboard() {
@@ -433,16 +472,6 @@ struct SessionPanelView: View {
     }
 
     // MARK: - Helpers
-
-    private var stateColor: Color {
-        switch stateMachine.state {
-        case .idle: return .green
-        case .working: return .blue
-        case .celebrate: return .yellow
-        case .nudge: return .orange
-        case .comfort: return .purple
-        }
-    }
 
     private func statusColor(_ status: SessionStatus) -> Color {
         switch status {
