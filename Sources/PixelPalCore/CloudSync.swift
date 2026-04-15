@@ -80,18 +80,23 @@ public final class CloudSync {
 
     // MARK: - iCloud change notification
 
-    func startObserving(onChange: @escaping ([DiscoveredCharacter]) -> Void) {
+    func startObserving(onChange: @escaping @MainActor ([DiscoveredCharacter]) -> Void) {
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
             object: iCloudStore,
             queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            if let data = self.iCloudStore.data(forKey: self.iCloudKey) {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                if let discoveries = try? decoder.decode([DiscoveredCharacter].self, from: data) {
-                    onChange(discoveries)
+        ) { [weak self] _ in
+            // queue: .main guarantees we run on the main actor at runtime;
+            // assumeIsolated lets the closure access @MainActor state without
+            // crossing a non-Sendable boundary (NSUbiquitousKeyValueStore).
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let data = self.iCloudStore.data(forKey: self.iCloudKey) {
+                    let decoder = JSONDecoder()
+                    decoder.dateDecodingStrategy = .iso8601
+                    if let discoveries = try? decoder.decode([DiscoveredCharacter].self, from: data) {
+                        onChange(discoveries)
+                    }
                 }
             }
         }
