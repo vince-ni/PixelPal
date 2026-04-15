@@ -128,6 +128,7 @@ struct WeeklyReportView: View {
         return .red
     }
 
+    @MainActor
     private func shareReport() {
         // Render this view as an image for sharing
         let renderer = ImageRenderer(content: self.body)

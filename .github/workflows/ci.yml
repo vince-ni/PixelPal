@@ -16,6 +16,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Pin to Xcode 15 — Xcode 16's Swift 6 frontend applies isolation rules
+      # that the codebase hasn't migrated to yet. Swift 6 migration is planned
+      # separately. macos-14 runners ship 15.x alongside 16.x.
+      - name: Select Xcode 15
+        run: |
+          ls /Applications/ | grep -i xcode
+          XCODE_PATH=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | head -n1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "No Xcode 15 installed on this runner — falling back to default"
+          else
+            echo "Selecting $XCODE_PATH"
+            sudo xcode-select -s "$XCODE_PATH"
+          fi
+
       - name: Swift version
         run: swift --version
 
