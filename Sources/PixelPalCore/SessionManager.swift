@@ -96,9 +96,11 @@ public final class SessionManager: ObservableObject {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 
-        process.terminationHandler = { [weak self] proc in
-            Task { @MainActor in
-                self?.handleTermination(sessionId: session.id, exitCode: proc.terminationStatus)
+        let sessionId = session.id
+        process.terminationHandler = { proc in
+            let exitCode = proc.terminationStatus
+            Task { @MainActor [weak self] in
+                self?.handleTermination(sessionId: sessionId, exitCode: exitCode)
             }
         }
 
@@ -145,8 +147,10 @@ public final class SessionManager: ObservableObject {
     // MARK: - Health check
 
     private func startHealthCheck() {
-        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkHealth() }
+        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            Task { @MainActor [weak self] in
+                self?.checkHealth()
+            }
         }
     }
 

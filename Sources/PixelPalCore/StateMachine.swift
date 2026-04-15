@@ -76,8 +76,10 @@ public final class StateMachine: ObservableObject {
                 scheduleTransition(to: .idle, after: 3.0)
             } else {
                 debounceTimer?.invalidate()
-                debounceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-                    Task { @MainActor in self?.state = .idle }
+                debounceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
+                    Task { @MainActor [weak self] in
+                        self?.state = .idle
+                    }
                 }
             }
             if let git = event.gitBranch, !git.isEmpty { gitBranch = git }
@@ -136,8 +138,10 @@ public final class StateMachine: ObservableObject {
 
     private func scheduleTransition(to target: CharacterState, after seconds: TimeInterval) {
         transitionTimer?.invalidate()
-        transitionTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.state = target }
+        transitionTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { _ in
+            Task { @MainActor [weak self] in
+                self?.state = target
+            }
         }
     }
 

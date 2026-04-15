@@ -119,8 +119,10 @@ final class FloatingCharacterController {
         updateFrame()
         // Only animate if there are multiple frames — single frame doesn't need a timer
         if currentFrames.count > 1 {
-            animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.updateFrame() }
+            animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+                Task { @MainActor [weak self] in
+                    self?.updateFrame()
+                }
             }
         }
     }

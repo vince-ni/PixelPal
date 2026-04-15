@@ -177,8 +177,8 @@ final class MenuBarController: NSObject {
 
     private func observeState() {
         // Fast loop for animation state (0.3s)
-        stateObserver = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        stateObserver = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.switchAnimation(to: self.stateMachine.state)
                 self.handleBubble()
@@ -187,8 +187,8 @@ final class MenuBarController: NSObject {
             }
         }
         // Slower loop for speech evaluation (5s) — SpeechEngine decides when to speak
-        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.workContext.resetIfNewDay()
                 self.evaluateSpeech()
@@ -236,8 +236,10 @@ final class MenuBarController: NSObject {
         frameIndex = 0
         updateFrame()
         if currentFrames.count > 1 {
-            animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.updateFrame() }
+            animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+                Task { @MainActor [weak self] in
+                    self?.updateFrame()
+                }
             }
         }
     }
