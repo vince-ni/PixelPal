@@ -24,7 +24,7 @@ Tests/PixelPalTests/           — 95 tests across 14 suites
 docs/                          — architecture, design principles, ui journey
 ```
 
-The `PixelPalCore` target exports 15 Swift files totaling roughly 2,200 lines of production code. The `PixelPal` target is the AppKit/SwiftUI shell, around 1,900 lines, most of it view code. The ratio is deliberate: the boring part is larger than the pretty part.
+The `PixelPalCore` target exports 15 Swift files totaling roughly 3,100 lines of production code. The `PixelPal` target is the AppKit/SwiftUI shell, around 2,100 lines, most of it view code. The ratio is deliberate: the boring part is larger than the pretty part.
 
 ## System diagram
 
@@ -293,7 +293,7 @@ The library/shell split makes three future variants trivial to reach:
 
 3. **Third-party integrations** — `ProviderAdapter` accepts anything that emits JSON events and spawns a process. Adding support for Zed, Helix, VS Code's Copilot chat, or an in-house agent harness is one adapter file.
 
-None of these requires rewriting anything. They require implementing one protocol.
+None of these requires rewriting anything. Each requires implementing one protocol.
 
 ---
 

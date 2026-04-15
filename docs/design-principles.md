@@ -88,7 +88,7 @@ The ntfy implementation is one file, 30 lines. Replacing it with Pushover, Disco
 
 **Complexity is debt. Abstraction is deferred complexity.** Every abstraction has an adoption tax (readers have to learn it), a maintenance tax (changes touch more files), and an over-fit tax (once built, it resists the shapes of future needs). If the concrete code is readable and short, the concrete code wins.
 
-PixelPal's codebase has three protocols — `ProviderAdapter`, `NotificationSink`, and `@MainActor` views — not because protocols were fashionable, but because each one isolates a real seam that the product will cross more than twice. A fourth protocol would require evidence that another real seam exists.
+PixelPal's codebase has two production protocols — `ProviderAdapter` and `NotificationSink` — not because protocols were fashionable, but because each one isolates a real seam that the product will cross more than twice. A third protocol would require evidence that another real seam exists.
 
 When a refactor removes code, the commit message should lead with the lines deleted, not the lines added. When a refactor adds code, the commit message should justify the addition with a concrete need, not a hypothetical extensibility.
 
@@ -99,7 +99,7 @@ Audit examples from recent history:
 - `stateColor` was removed from `SessionPanelView.swift` the moment the character-voiced state label replaced the colored status dot. No backwards-compat hack for "if someone was relying on it."
 - The `NotificationSink` protocol was added because we had two sinks (local bubble, remote ntfy) with a third imminent (the router). Before the second sink shipped, there was no protocol — just a struct calling an NSUserNotification directly.
 
-The discipline is unglamorous. It is also the reason the codebase stays readable at 4,100 lines of production code. Every line that doesn't exist is a line that doesn't need to be read, tested, or maintained.
+The discipline is unglamorous. It is also the reason the codebase stays readable at roughly 5,200 lines of production code. Every line that doesn't exist is a line that doesn't need to be read, tested, or maintained.
 
 ---
 
