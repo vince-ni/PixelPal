@@ -15,7 +15,12 @@ let package = Package(
     name: "PixelPal",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-testing.git", from: "0.10.0"),
+        // Pinned to exact 0.10.0 because later tags (0.11+, 0.99.0) ship a
+        // swift-tools-version: 6.0 manifest, which Xcode 15 cannot parse —
+        // resolution would fail before tests ever run. 0.10.0 is the last
+        // release in the swift-tools 5.10 line and contains the API surface
+        // we use (@Suite, @Test, #expect, #require).
+        .package(url: "https://github.com/swiftlang/swift-testing.git", exact: "0.10.0"),
     ],
     targets: [
         .target(
