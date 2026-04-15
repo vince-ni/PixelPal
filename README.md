@@ -6,6 +6,8 @@ PixelPal is a macOS companion app for developers who spend their days with Claud
 
 Most AI developer tooling optimizes what the agent can do. PixelPal optimizes what happens to the human using it.
 
+**Deep dives**: [Architecture](./docs/architecture.md) · [Design Principles](./docs/design-principles.md) · [UI Redesign Journey](./docs/ui-redesign-journey.md)
+
 ---
 
 ## Why this exists
