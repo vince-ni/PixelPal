@@ -7,7 +7,7 @@
 
 **The only AI agent companion that cares about you, not just your code.**
 
-A macOS menu-bar app that manages your Claude Code / Codex / Aider sessions while a pixel character quietly keeps you company. It notices long sessions, celebrates what ships, and grows with you over months.
+A macOS menu-bar app that observes your Claude Code / Codex / Aider terminal sessions while a pixel character quietly keeps you company. It notices long sessions, celebrates what ships, and grows with you over months — you run the agents in your own terminal, PixelPal watches and reacts.
 
 [**Quick start**](#quick-start) · [**Architecture**](./docs/architecture.md) · [**Design principles**](./docs/design-principles.md) · [**UI redesign journey**](./docs/ui-redesign-journey.md) · [**Roadmap**](#roadmap)
 
@@ -29,6 +29,20 @@ PixelPal asks a different one: **the developer running three Claude Code session
 
 Productivity tools treat humans like machines that happen to get tired. PixelPal treats the tired human as the actual product surface.
 
+## What makes PixelPal different
+
+| Most AI dev tools | PixelPal |
+|---|---|
+| Make the agent do more | Make the human hurt less — three-layer break engine (20/52/90 min) + context-aware comfort when errors spike or flow breaks |
+| Scripted, timer-based pet animations | `WorkContext`-driven triggers: the character only speaks when an observation crosses a threshold worth speaking about, with real work data templated in |
+| Gamify with streaks, XP, guilt | Animal Crossing philosophy — absence never punishes, money cannot accelerate. Evolution is a pure function of cumulative days together |
+| Send telemetry to the cloud | Work data never enters the system boundary. The socket carries exit codes and timings; never command content, never file contents, never agent prompts |
+| Require account / auth for remote | ntfy topic-as-capability — 20-char unguessable token, self-hostable in 15 minutes, zero server-side state |
+| Hardcode one AI tool | 20-line `ProviderAdapter` protocol; adding a new tool is one file |
+| UI that launches and manages sessions | UI that observes. Open your own terminal; the shell hook takes it from there |
+
+Each row has a receipt in the code — follow the links in [docs/architecture.md](./docs/architecture.md).
+
 ## Quick start
 
 ```bash
@@ -46,7 +60,7 @@ A signed `.dmg` will ship with the first public release.
 |  |  |
 |---|---|
 | **Menu-bar presence** | Pixel character in the status bar, draggable floating companion in a screen corner, Minimal Mode to keep only the menu bar |
-| **Session management** | Spawn / monitor / auto-restart / stop Claude Code, Codex, Aider sessions from one panel |
+| **Observational session view** | Shell hook + provider adapters surface what you're running — no spawning, no child processes. Onboarding card launches your preferred terminal; you run `claude` / `codex` / `aider` yourself |
 | **Context-aware speech** | Characters speak only when a `WorkContext` observation crosses a threshold worth speaking about — never on a timer |
 | **Passive evolution** | Six stages driven by cumulative days. Animal Crossing philosophy: absence never punishes, money cannot accelerate |
 | **Discovery system** | Nine characters unlock through your real work journey — no gacha, no store |
@@ -72,13 +86,28 @@ Work data never leaves the device. Only anonymized character-discovery state opt
 ## Engineering discipline
 
 - **Library before app.** `PixelPalCore` compiles against Foundation alone — no AppKit dependency. The core could ship as a CLI, iOS companion, or team daemon unchanged.
-- **Adapters, not forks.** `ProviderAdapter` is a 30-line protocol. Adding a fourth AI tool is one file; the session manager doesn't know what it's running.
+- **Adapters, not forks.** `ProviderAdapter` is a 20-line protocol. Adding a fourth AI tool is one file.
 - **Observation over scripting.** Every utterance is a pure function of `WorkContext`. The character never speaks on a timer.
+- **Observe, never drive.** PixelPal does not spawn, manage, or orchestrate AI sessions — the user runs agents in their own terminal. The app watches and reacts. Companion, not conductor.
 - **Capability over identity.** The ntfy topic is the token. No account, no server-side state, no analytics.
-- **Red team at every external boundary.** Socket server has 8 adversarial tests covering malformed JSON, oversized payloads, concurrent writes, injection attempts. 95 tests, 14 suites, on every build.
-- **Delete rather than abstract.** Two production protocols, not six. Speculative generality is treated as debt.
+- **Red team at every external boundary.** Socket server has 8 adversarial tests covering malformed JSON, oversized payloads, concurrent writes, injection attempts. 94 tests across 14 suites on every build.
+- **Delete rather than abstract.** Two production protocols, not six. Speculative generality is treated as debt; the commit history removes code more often than it adds.
 
 [Full write-up →](./docs/architecture.md) · [Seven principles →](./docs/design-principles.md)
+
+## Principles I build with
+
+Seven rules show up everywhere in this repo — code, docs, commit messages. Each one is a decision I'd make the same way on any product, not just this one:
+
+- **Pitch consistency over feature count.** Every UI element either reinforces the product thesis or dilutes it. Most "UI bugs" are thesis-dilution bugs in disguise. Writing this down forced a 10-commit UI refactor — worth the time. [UI redesign journey →](./docs/ui-redesign-journey.md)
+- **Observe, never drive.** A companion that tries to manage the user's session is no longer a companion — it's a middle manager. The spawn path got deleted for this reason.
+- **Delete rather than abstract.** Speculative generality is debt. Two production protocols exist because two seams exist; a third would need evidence, not a hunch.
+- **95% quiet, 5% personality.** Ambient by default; speech earns its moment. Silence is the product.
+- **Library before app.** Business logic compiles against Foundation alone. If a feature can't live in the core, it's a presentation concern and it doesn't belong in the business layer.
+- **Capability over identity.** The ntfy topic is the token. Account-less security where the architecture allows it.
+- **Claude builds, Codex reviews.** Independent review caught three bugs across the last six commits — a version-pin collision, an unwired API claim, an empty-state copy mismatch — that would have shipped otherwise. Generation and verification belong to different models.
+
+Full versions with code receipts in [docs/design-principles.md](./docs/design-principles.md).
 
 ## Roadmap
 
@@ -94,7 +123,7 @@ Work data never leaves the device. Only anonymized character-discovery state opt
 
 Swift 5.9 · SwiftUI + AppKit (deliberate hybrid — AppKit for menu bar, panel, keyboard shortcuts; SwiftUI for everything else) · Swift Package Manager library + executable targets · `swift-testing` · Unix domain socket IPC · Nearest-neighbor `NSImage` rendering · Cloudflare Workers + D1 backend (~130 LOC TypeScript, anonymous device UUID only).
 
-~5,200 production lines of Swift. 95 tests across 14 suites.
+~5,200 production lines of Swift. 94 tests across 14 suites, green on every push via GitHub Actions.
 
 ## Privacy
 
@@ -118,6 +147,8 @@ If you're reading the code because you're thinking about building something simi
 ## Credits
 
 Character art generated with [Pixel Engine](https://pixelengine.ai). Everything else — product design, personality system, speech pools, interaction philosophy, and this codebase — by [Vince Ni](https://github.com/vince-ni).
+
+PixelPal is the product form of a broader thesis: **AI should earn the right to be present in a human's workspace by how little it asks and how well it notices.**
 
 ## License
 

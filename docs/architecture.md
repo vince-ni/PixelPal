@@ -20,7 +20,7 @@ Sources/
 Backend/                       — Cloudflare Workers + D1 (~130 LOC TS)
 Shell/                         — ~50-line zsh hook, shipped as resource
 Scripts/                       — build + LaunchAgent install
-Tests/PixelPalTests/           — 95 tests across 14 suites
+Tests/PixelPalTests/           — 94 tests across 14 suites
 docs/                          — architecture, design principles, ui journey
 ```
 
@@ -82,16 +82,15 @@ public protocol ProviderAdapter {
     var displayName: String { get }
     var isInstalled: Bool { get }
     var supportsNativeRemote: Bool { get }
-    func buildProcess(workspace: String, remote: Bool) -> Process
     func parseOutput(_ line: String) -> ProviderEvent?
 }
 ```
 
-The entire "which AI tool are we running" concern collapses into 30 lines. `ClaudeCodeAdapter`, `CodexAdapter`, and `AiderAdapter` each live in their own file. Adding a fourth is one new file and zero changes to any existing code.
+The entire "which AI tool are we running" concern collapses into 20 lines of protocol. `ClaudeCodeAdapter`, `CodexAdapter`, and `AiderAdapter` each live in their own file. Adding a fourth is one new file and zero changes to any existing code.
 
-**Why a protocol and not a switch statement.** Because a switch statement would have meant the SessionManager knows the difference between `claude --print` and `codex --session`, and the UI would have had conditional branches like `if sessionProvider == "codex" && session.supportsRemote`. Every integration touching three or four files in three or four places. The adapter pattern flattens the knowledge — the session manager handles `ProviderAdapter`s, not strings, and each adapter is sealed inside its own file.
+**Why a protocol and not a switch statement.** Because a switch would have meant every UI site knows how to special-case each provider. The adapter pattern flattens the knowledge — each adapter is sealed inside its own file and the rest of the codebase treats them uniformly.
 
-**Trade-off made explicit.** Each adapter duplicates a small amount of process-building boilerplate. If we ever grow to seven or eight providers that is a refactor target. At three, inheritance would be more complexity than duplication saves.
+**What the protocol deliberately does not have.** No `buildProcess` or `spawn` method. PixelPal does not run the agents — the user runs them in their own terminal, and the shell hook + `parseOutput` surface what the app needs to know. An earlier version of the adapter carried a `buildProcess(workspace:remote:) -> Process` method; it was removed along with the whole spawn path once the observational model proved cleaner. Observe, never drive.
 
 ### 2. `SocketServer` + `ShellEvent` — the one ingress
 
@@ -245,7 +244,7 @@ Fifteen steps, zero scripted animations, zero hardcoded timers. Everything is an
 
 ## Test philosophy
 
-95 tests across 14 suites. Distributions:
+94 tests across 14 suites. Distributions:
 - 10 evolution-engine boundary tests
 - 8 provider-registry and parsing tests
 - 8 speech-engine context-aware decision tests

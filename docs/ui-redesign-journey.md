@@ -173,7 +173,7 @@ c7e6279 Security: remove Sparkle feed URL + align README closed-source claims
 d762024 Phase 2: intelligence layer — library split, providers, evolution, speech engine
 ```
 
-**Test coverage**: 95 tests across 14 suites. Every commit ran the suite green before landing.
+**Test coverage**: 94 tests across 14 suites. Every commit ran the suite green before landing.
 
 **Build target**: macOS 14+, Universal Binary (Apple Silicon + Intel), Swift 5.9.
 
