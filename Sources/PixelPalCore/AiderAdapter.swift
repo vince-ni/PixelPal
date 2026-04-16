@@ -13,14 +13,6 @@ public struct AiderAdapter: ProviderAdapter {
         which("aider") != nil
     }
 
-    public func buildProcess(workspace: String, remote: Bool) -> Process {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.currentDirectoryURL = URL(fileURLWithPath: workspace)
-        process.arguments = ["aider", "--map-whole-repo"]
-        return process
-    }
-
     public func parseOutput(_ line: String) -> ProviderEvent? {
         // Aider outputs commit messages when it makes changes
         if line.hasPrefix("Commit ") && line.contains("→") {

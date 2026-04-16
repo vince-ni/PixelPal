@@ -46,25 +46,21 @@ struct ProviderTests {
         }
     }
 
-    @Test("buildProcess returns configured process")
-    func buildProcess() {
+    @Test("ClaudeCodeAdapter extracts remote URL from stdout line")
+    func claudeRemoteURLParsing() {
         let adapter = ProviderRegistry.adapter(for: "claude-code")!
-        let process = adapter.buildProcess(workspace: "/tmp", remote: false)
-        #expect(process.currentDirectoryURL?.path == "/tmp")
-        #expect(process.executableURL != nil)
+        let event = adapter.parseOutput("Remote session ready: https://claude.ai/chat/abc123")
+        if case .remoteURL(let url) = event {
+            #expect(url.hasPrefix("https://claude.ai/chat/"))
+        } else {
+            Issue.record("Expected .remoteURL, got \(String(describing: event))")
+        }
     }
 
-    @Test("Claude Code remote adds --remote arg")
-    func claudeRemoteArg() {
+    @Test("ClaudeCodeAdapter returns nil for non-URL lines")
+    func claudeIgnoresUnrelatedLines() {
         let adapter = ProviderRegistry.adapter(for: "claude-code")!
-        let process = adapter.buildProcess(workspace: "/tmp", remote: true)
-        #expect(process.arguments?.contains("--remote") == true)
-    }
-
-    @Test("Claude Code non-remote omits --remote")
-    func claudeNoRemoteArg() {
-        let adapter = ProviderRegistry.adapter(for: "claude-code")!
-        let process = adapter.buildProcess(workspace: "/tmp", remote: false)
-        #expect(process.arguments?.contains("--remote") != true)
+        #expect(adapter.parseOutput("some random output") == nil)
+        #expect(adapter.parseOutput("https://github.com/example") == nil)
     }
 }

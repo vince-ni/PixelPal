@@ -28,7 +28,6 @@ struct SessionPanelView: View {
     let onQuit: () -> Void
     let onReconfigureNtfy: () -> Void
 
-    @State private var showNewSession = false
     @State private var selectedTab = 0  // 0=sessions, 1=companions
 
     private var activeAccent: Color {
@@ -208,42 +207,59 @@ struct SessionPanelView: View {
 
     // MARK: - Sessions Tab
 
+    /// State-aware layout:
+    /// - No sessions ever observed → onboarding card with Open-Terminal button.
+    /// - Sessions present → list of session rows, no onboarding noise.
     private var sessionsTab: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // New session button — highest-frequency action, top placement
-            Button(action: { showNewSession = true }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus.circle.fill")
-                    Text("New Session")
-                }
-                .font(.system(size: 12, weight: .medium))
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .popover(isPresented: $showNewSession) {
-                NewSessionView(sessionManager: sessionManager, isPresented: $showNewSession)
-            }
-
             if sessionManager.sessions.isEmpty {
-                VStack(spacing: 6) {
-                    Text("No active sessions")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Text("Work in any terminal — PixelPal tracks your shell activity automatically.")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.vertical, 16)
-                .padding(.horizontal, 12)
+                onboardingCard
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
             } else {
                 ForEach(sessionManager.sessions) { session in
                     sessionRow(session)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
+                .padding(.top, 4)
             }
         }
+    }
+
+    // MARK: - Onboarding card (shown only in empty state)
+
+    @State private var breathingDot = false
+
+    private var onboardingCard: some View {
+        VStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+                    .opacity(breathingDot ? 1.0 : 0.4)
+                    .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: breathingDot)
+                Text("Listening")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+
+            Text("Run `claude`, `codex`, or `aider` in your terminal — your character will react to errors, long sessions, and task completions as you work.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+
+            OpenTerminalButton()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.06))
+        )
+        .onAppear { breathingDot = true }
     }
 
     private func sessionRow(_ session: AgentSession) -> some View {
@@ -262,20 +278,34 @@ struct SessionPanelView: View {
 
             Spacer()
 
-            if session.isRemote {
+            if let remoteURL = session.remoteURL, !remoteURL.isEmpty {
+                Button(action: { copyToPasteboard(remoteURL) }) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .foregroundColor(.accentColor)
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .help("Copy remote URL — open on another device to continue the session")
+            } else if session.isRemote {
                 Image(systemName: "antenna.radiowaves.left.and.right")
-                    .foregroundColor(.blue)
+                    .foregroundColor(.accentColor)
                     .font(.system(size: 10))
             }
 
-            Button(action: { sessionManager.stopSession(session.id) }) {
-                Image(systemName: "stop.circle")
+            Button(action: { sessionManager.dismissSession(session.id) }) {
+                Image(systemName: "xmark.circle")
                     .foregroundColor(.secondary)
                     .font(.system(size: 12))
             }
             .buttonStyle(.plain)
+            .help("Remove from list (your terminal session is unaffected)")
         }
         .padding(.vertical, 4)
+    }
+
+    private func copyToPasteboard(_ s: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
     }
 
     // MARK: - Companions Tab (Companion Log)
@@ -581,63 +611,3 @@ struct SessionPanelView: View {
 
 }
 
-// MARK: - New Session View
-
-struct NewSessionView: View {
-    @ObservedObject var sessionManager: SessionManager
-    @Binding var isPresented: Bool
-
-    @State private var selectedProvider = "claude-code"
-    @State private var workspace = ""
-    @State private var enableRemote = false
-
-    private var installedProviders: [ProviderAdapter] {
-        ProviderRegistry.installed
-    }
-
-    private var selectedAdapter: ProviderAdapter? {
-        ProviderRegistry.adapter(for: selectedProvider)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("New Session")
-                .font(.headline)
-
-            Picker("Provider", selection: $selectedProvider) {
-                ForEach(installedProviders, id: \.id) { provider in
-                    Text(provider.displayName).tag(provider.id)
-                }
-            }
-            .pickerStyle(.menu)
-
-            HStack {
-                Text("Directory")
-                    .font(.system(size: 12))
-                TextField("~/Projects/...", text: $workspace)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-            }
-
-            Toggle("Enable Remote", isOn: $enableRemote)
-                .font(.system(size: 12))
-                .disabled(selectedAdapter?.supportsNativeRemote != true)
-                .help(selectedAdapter?.supportsNativeRemote == true ? "" : "This provider doesn't support native remote")
-
-            HStack {
-                Spacer()
-                Button("Cancel") { isPresented = false }
-                Button("Start") {
-                    let dir = workspace.isEmpty
-                        ? FileManager.default.homeDirectoryForCurrentUser.path
-                        : (workspace as NSString).expandingTildeInPath
-                    sessionManager.createSession(provider: selectedProvider, workspace: dir, remote: enableRemote)
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(16)
-        .frame(width: 300)
-    }
-}

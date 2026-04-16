@@ -7,223 +7,123 @@ public enum SessionStatus: String, Codable {
     case stopped
 }
 
+/// A record of AI-agent activity observed on this machine. PixelPal does not
+/// spawn or manage these processes — sessions here reflect what the shell
+/// hook and provider adapters notice in the user's own terminals.
 public struct AgentSession: Identifiable, Codable {
     public let id: UUID
     public var provider: String           // "claude-code", "codex", "aider"
     public var workspace: String          // directory path
-    public var name: String               // display name (auto-generated or user-set)
+    public var name: String               // display name
     public var status: SessionStatus
     public var isRemote: Bool
     public var remoteURL: String?
     public var startedAt: Date
-    public var lastHeartbeat: Date
-    public var restartCount: Int
-    public var pid: Int32?
+
+    public init(
+        id: UUID = UUID(),
+        provider: String,
+        workspace: String,
+        name: String,
+        status: SessionStatus = .running,
+        isRemote: Bool = false,
+        remoteURL: String? = nil,
+        startedAt: Date = Date()
+    ) {
+        self.id = id
+        self.provider = provider
+        self.workspace = workspace
+        self.name = name
+        self.status = status
+        self.isRemote = isRemote
+        self.remoteURL = remoteURL
+        self.startedAt = startedAt
+    }
 
     public var elapsedMinutes: Int {
         Int(Date().timeIntervalSince(startedAt) / 60)
     }
 }
 
+/// Observational session store. The user runs `claude` / `codex` / `aider`
+/// in their own terminal; the entry points below accept the shell-hook
+/// events that will surface those sessions.
+///
+/// ## Current wiring status
+///
+/// The entry points are **API placeholders**. No call site in the app
+/// currently invokes them — `main.swift` routes socket events to
+/// `StateMachine` and `WorkPatternStore` only. As a result the Sessions
+/// tab today permanently reflects an empty list, and the UI deliberately
+/// uses that empty state to show an onboarding card rather than attempting
+/// to represent every observed command as a session row.
+///
+/// Wiring the entry points to socket events (with correct provider
+/// detection, workspace tracking, and concurrent-session correlation via
+/// `workspace + startedAt` fingerprints) is scheduled as a separate
+/// Phase 3 piece of work. Until then this class intentionally stores no
+/// state and persists nothing — doing so would risk showing stale or
+/// mis-attributed rows.
+///
+/// Entry points reserved for Phase 3:
+///   - `recordSessionStarted` — shell hook saw an AI command begin
+///   - `recordRemoteURL`      — provider output carried a remote URL
+///   - `recordSessionEnded`   — shell hook saw the AI session end
+///   - `dismissSession`       — user clicked the dismiss button on a row
 @MainActor
 public final class SessionManager: ObservableObject {
     @Published public private(set) var sessions: [AgentSession] = []
 
-    private let maxRestarts = 3
-    private var healthCheckTimer: Timer?
-    private let persistencePath: String
+    public init() {}
 
-    public init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let pixelpalDir = appSupport.appendingPathComponent("PixelPal", isDirectory: true)
-        try? FileManager.default.createDirectory(at: pixelpalDir, withIntermediateDirectories: true)
-        persistencePath = pixelpalDir.appendingPathComponent("sessions.json").path
+    // MARK: - Observational entry points (Phase 3 — currently unwired)
 
-        loadSessions()
-        startHealthCheck()
-    }
-
-    // MARK: - Session lifecycle
-
-    public func createSession(provider: String, workspace: String, remote: Bool = false) {
+    /// Shell hook observed an AI command begin. Creates a running record.
+    public func recordSessionStarted(provider: String, workspace: String) {
         let session = AgentSession(
-            id: UUID(),
             provider: provider,
             workspace: workspace,
-            name: nameForWorkspace(workspace),
-            status: .idle,
-            isRemote: remote,
-            remoteURL: nil,
-            startedAt: Date(),
-            lastHeartbeat: Date(),
-            restartCount: 0,
-            pid: nil
+            name: URL(fileURLWithPath: workspace).lastPathComponent
         )
         sessions.append(session)
-        spawnProcess(for: sessions.count - 1)
-        saveSessions()
     }
 
-    public func stopSession(_ id: UUID) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
-        killProcess(at: idx)
-        sessions[idx].status = .stopped
-        saveSessions()
-    }
-
-    public func removeSession(_ id: UUID) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
-        killProcess(at: idx)
-        sessions.remove(at: idx)
-        saveSessions()
-    }
-
-    // MARK: - Process management
-
-    private func spawnProcess(for index: Int) {
-        guard index < sessions.count else { return }
-        let session = sessions[index]
-
-        guard let adapter = ProviderRegistry.adapter(for: session.provider) else {
-            print("[PixelPal] Unknown provider: \(session.provider)")
-            sessions[index].status = .error
+    /// Attach a remote URL to the most recent matching running session.
+    /// Phase 3 will replace the last-match heuristic with a
+    /// `workspace + startedAt` fingerprint to handle concurrent sessions.
+    public func recordRemoteURL(_ url: String, provider: String) {
+        guard let idx = sessions.lastIndex(where: { $0.provider == provider && $0.status == .running }) else {
             return
         }
-
-        let process = adapter.buildProcess(workspace: session.workspace, remote: session.isRemote)
-
-        // Redirect stdout/stderr to /dev/null for background sessions
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        let sessionId = session.id
-        process.terminationHandler = { proc in
-            let exitCode = proc.terminationStatus
-            Task { @MainActor [weak self] in
-                self?.handleTermination(sessionId: sessionId, exitCode: exitCode)
-            }
-        }
-
-        do {
-            try process.run()
-            sessions[index].pid = process.processIdentifier
-            sessions[index].status = .running
-            sessions[index].lastHeartbeat = Date()
-            saveSessions()
-            print("[PixelPal] Spawned \(session.provider) (PID \(process.processIdentifier)) in \(session.workspace)")
-        } catch {
-            print("[PixelPal] Failed to spawn \(session.provider): \(error)")
-            sessions[index].status = .error
-        }
+        sessions[idx].remoteURL = url
+        sessions[idx].isRemote = true
     }
 
-    private func killProcess(at index: Int) {
-        guard let pid = sessions[index].pid, pid > 0 else { return }
-        kill(pid, SIGTERM)
-        sessions[index].pid = nil
+    /// Mark the most recent running session of the given provider as ended.
+    /// Exit code of 0 or nil → stopped; anything else → error. Same
+    /// last-match caveat as `recordRemoteURL` applies.
+    public func recordSessionEnded(provider: String, exitCode: Int? = nil) {
+        guard let idx = sessions.lastIndex(where: { $0.provider == provider && $0.status == .running }) else {
+            return
+        }
+        sessions[idx].status = (exitCode == nil || exitCode == 0) ? .stopped : .error
     }
 
-    private func handleTermination(sessionId: UUID, exitCode: Int32) {
-        guard let idx = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
-
-        if exitCode == 0 {
-            sessions[idx].status = .stopped
-            print("[PixelPal] Session \(sessions[idx].name) completed normally")
-        } else if sessions[idx].restartCount < maxRestarts {
-            sessions[idx].restartCount += 1
-            sessions[idx].status = .error
-            print("[PixelPal] Session \(sessions[idx].name) crashed (exit \(exitCode)), restarting (\(sessions[idx].restartCount)/\(maxRestarts))")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.spawnProcess(for: idx)
-            }
-        } else {
-            sessions[idx].status = .error
-            sessions[idx].pid = nil
-            print("[PixelPal] Session \(sessions[idx].name) exceeded max restarts")
-        }
-        saveSessions()
-    }
-
-    // MARK: - Health check
-
-    private func startHealthCheck() {
-        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-            Task { @MainActor [weak self] in
-                self?.checkHealth()
-            }
-        }
-    }
-
-    private func checkHealth() {
-        for i in sessions.indices {
-            guard let pid = sessions[i].pid, sessions[i].status == .running else { continue }
-            // Check if process is still alive
-            if kill(pid, 0) != 0 {
-                handleTermination(sessionId: sessions[i].id, exitCode: -1)
-            } else {
-                sessions[i].lastHeartbeat = Date()
-            }
-        }
-    }
-
-    // MARK: - Remote detection
-
-    func detectRemoteStatus() {
-        for i in sessions.indices {
-            guard let pid = sessions[i].pid else { continue }
-            // Check if process was launched with --remote by reading /proc or ps
-            let checkProcess = Process()
-            checkProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
-            checkProcess.arguments = ["-p", "\(pid)", "-o", "args="]
-            let pipe = Pipe()
-            checkProcess.standardOutput = pipe
-            try? checkProcess.run()
-            checkProcess.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let args = String(data: data, encoding: .utf8) {
-                sessions[i].isRemote = args.contains("--remote")
-            }
-        }
+    /// User clicked the dismiss button on a row — hide it from the list.
+    /// UI state only; the underlying terminal session (if still alive) is
+    /// unaffected.
+    public func dismissSession(_ id: UUID) {
+        sessions.removeAll { $0.id == id }
     }
 
     // MARK: - Aggregate state for character
 
+    /// Used by the StateMachine to roll up multi-session status into a
+    /// single character expression.
     public var aggregateState: CharacterState {
         if sessions.isEmpty { return .idle }
         if sessions.contains(where: { $0.status == .error }) { return .comfort }
         if sessions.contains(where: { $0.status == .running }) { return .working }
         return .idle
-    }
-
-    // MARK: - Persistence
-
-    private func saveSessions() {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        if let data = try? encoder.encode(sessions) {
-            try? data.write(to: URL(fileURLWithPath: persistencePath))
-        }
-    }
-
-    private func loadSessions() {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: persistencePath)) else { return }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        if let loaded = try? decoder.decode([AgentSession].self, from: data) {
-            // Mark all sessions as stopped on load (processes died with app restart)
-            sessions = loaded.map { session in
-                var s = session
-                s.status = .stopped
-                s.pid = nil
-                return s
-            }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func nameForWorkspace(_ path: String) -> String {
-        URL(fileURLWithPath: path).lastPathComponent
     }
 }

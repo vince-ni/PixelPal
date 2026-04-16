@@ -13,18 +13,6 @@ public struct ClaudeCodeAdapter: ProviderAdapter {
         which("claude") != nil
     }
 
-    public func buildProcess(workspace: String, remote: Bool) -> Process {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.currentDirectoryURL = URL(fileURLWithPath: workspace)
-
-        var args = ["claude"]
-        if remote { args.append("--remote") }
-        process.arguments = args
-
-        return process
-    }
-
     public func parseOutput(_ line: String) -> ProviderEvent? {
         // Claude Code communicates via hooks (socket), not stdout parsing.
         // Remote URL appears in stdout when --remote is used.

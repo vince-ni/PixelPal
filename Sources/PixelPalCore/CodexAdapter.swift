@@ -13,14 +13,6 @@ public struct CodexAdapter: ProviderAdapter {
         which("codex") != nil
     }
 
-    public func buildProcess(workspace: String, remote: Bool) -> Process {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.currentDirectoryURL = URL(fileURLWithPath: workspace)
-        process.arguments = ["codex", "--cwd", workspace]
-        return process
-    }
-
     public func parseOutput(_ line: String) -> ProviderEvent? {
         // Codex emits structured output we can parse for task events
         if line.contains("Applied") && line.contains("patch") {

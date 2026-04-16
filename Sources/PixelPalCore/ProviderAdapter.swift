@@ -2,7 +2,8 @@ import Foundation
 
 /// Protocol for AI tool provider adapters.
 /// Each provider (Claude Code, Codex, Aider) implements this to handle
-/// tool-specific spawn arguments, output parsing, and feature detection.
+/// feature detection and output-line parsing. PixelPal observes the user's
+/// own terminal sessions — no process is ever spawned by the app itself.
 public protocol ProviderAdapter {
     /// Unique identifier (e.g. "claude-code", "codex", "aider")
     var id: String { get }
@@ -13,14 +14,8 @@ public protocol ProviderAdapter {
     /// Whether the tool is installed on this system
     var isInstalled: Bool { get }
 
-    /// Build the Process for spawning this tool.
-    /// - Parameters:
-    ///   - workspace: working directory
-    ///   - remote: whether to enable remote access
-    /// - Returns: configured Process ready to run
-    func buildProcess(workspace: String, remote: Bool) -> Process
-
-    /// Whether this provider supports native remote (e.g. claude --remote)
+    /// Whether this provider supports native remote (e.g. `claude --remote`).
+    /// Used by the UI to decorate session rows with a remote-capable hint.
     var supportsNativeRemote: Bool { get }
 
     /// Parse a line of stdout for events this provider emits.
