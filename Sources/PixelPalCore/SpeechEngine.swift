@@ -25,6 +25,7 @@ public final class SpeechEngine {
 
     private let workContext: WorkContext
     private var reminderEngine: ReminderEngine?
+    private let now: @MainActor () -> Date
     private var lastSpeechTime: Date = .distantPast
     private var lastTrigger: Trigger?
     private var dismissCount = 0
@@ -38,9 +39,13 @@ public final class SpeechEngine {
     // Minimum seconds between any two speeches (prevents spam)
     private let cooldown: TimeInterval = 30
 
-    public init(workContext: WorkContext, reminderEngine: ReminderEngine? = nil) {
+    /// - Parameter now: Injectable clock. Production uses `{ Date() }`.
+    ///   Tests inject a fixed time to avoid wall-clock–dependent failures
+    ///   (isLateNight triggers between 00:00–05:00 local time).
+    public init(workContext: WorkContext, reminderEngine: ReminderEngine? = nil, now: @escaping @MainActor () -> Date = { Date() }) {
         self.workContext = workContext
         self.reminderEngine = reminderEngine
+        self.now = now
     }
 
     // MARK: - Main evaluation (called every tick from observation loop)
@@ -69,8 +74,8 @@ public final class SpeechEngine {
         }
 
         // Late night (once per hour after midnight)
-        if isLateNight() && Date().timeIntervalSince(lastLateNightWarning) > 3600 {
-            lastLateNightWarning = Date()
+        if isLateNight() && now().timeIntervalSince(lastLateNightWarning) > 3600 {
+            lastLateNightWarning = now()
             return speak(.lateNight, characterId: characterId)
         }
 
@@ -104,7 +109,7 @@ public final class SpeechEngine {
 
     /// Called when user dismisses a bubble
     public func userDismissed() {
-        let now = Date()
+        let now = self.now()
         if let start = dismissWindowStart, now.timeIntervalSince(start) < 300 {
             dismissCount += 1
             if dismissCount >= 2 {
@@ -126,7 +131,7 @@ public final class SpeechEngine {
 
     private func speak(_ trigger: Trigger, characterId: String) -> (Trigger, String)? {
         guard let text = composeSpeech(trigger, characterId: characterId) else { return nil }
-        lastSpeechTime = Date()
+        lastSpeechTime = now()
         lastTrigger = trigger
         return (trigger, text)
     }
@@ -249,13 +254,13 @@ public final class SpeechEngine {
     // MARK: - Guards
 
     private func canSpeak() -> Bool {
-        if let silent = silentUntil, Date() < silent { return false }
-        if Date().timeIntervalSince(lastSpeechTime) < cooldown { return false }
+        if let silent = silentUntil, now() < silent { return false }
+        if now().timeIntervalSince(lastSpeechTime) < cooldown { return false }
         return true
     }
 
     private func isLateNight() -> Bool {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let hour = Calendar.current.component(.hour, from: now())
         return hour >= 0 && hour < 5
     }
 

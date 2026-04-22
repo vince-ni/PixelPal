@@ -90,6 +90,10 @@ public final class SocketServer {
         }
     }
 
+    // Drop any socket message larger than 64 KB — shell events are typically
+    // under 1 KB, so anything far beyond that is either malformed or adversarial.
+    private let maxMessageSize = 65_536
+
     private func handleClient(_ fd: Int32) {
         defer { close(fd) }
 
@@ -99,6 +103,7 @@ public final class SocketServer {
             let bytesRead = read(fd, &buffer, buffer.count)
             if bytesRead <= 0 { break }
             data.append(contentsOf: buffer[0..<bytesRead])
+            if data.count > maxMessageSize { return } // discard oversized
         }
 
         guard !data.isEmpty else { return }
@@ -113,21 +118,29 @@ public final class SocketServer {
     }
 
     private func parseEvent(_ json: String) -> ShellEvent? {
-        guard let data = json.data(using: .utf8),
+        guard json.count <= maxMessageSize,
+              let data = json.data(using: .utf8),
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let kindStr = dict["e"] as? String,
               let kind = ShellEvent.Kind(rawValue: kindStr) else {
             return nil
         }
 
+        // Truncate string fields to prevent memory abuse from crafted payloads.
+        // Shell hook already caps command at 200 chars, but the socket itself
+        // must not trust the sender.
+        let cmd = (dict["cmd"] as? String).map { String($0.prefix(256)) }
+        let pwd = (dict["pwd"] as? String).map { String($0.prefix(1024)) }
+        let git = (dict["git"] as? String).map { String($0.prefix(255)) }
+
         return ShellEvent(
             kind: kind,
             timestamp: dict["t"] as? TimeInterval ?? Date().timeIntervalSince1970,
-            command: dict["cmd"] as? String,
+            command: cmd,
             exitCode: dict["exit"] as? Int,
             duration: dict["dur"] as? Int,
-            pwd: dict["pwd"] as? String,
-            gitBranch: dict["git"] as? String
+            pwd: pwd,
+            gitBranch: git
         )
     }
 

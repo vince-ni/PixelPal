@@ -6,10 +6,17 @@ import Foundation
 struct SpeechEdgeCaseTests {
 
     @MainActor
+    private static func noon() -> Date {
+        var c = DateComponents()
+        c.year = 2026; c.month = 4; c.day = 15; c.hour = 12; c.minute = 0
+        return Calendar.current.date(from: c)!
+    }
+
+    @MainActor
     @Test("Unknown character returns nil, doesn't crash")
     func unknownCharacter() {
         let ctx = WorkContext()
-        let engine = SpeechEngine(workContext: ctx)
+        let engine = SpeechEngine(workContext: ctx, now: Self.noon)
         let text = engine.onEvent(.taskComplete, characterId: "nonexistent_character_xyz")
         // Should return nil gracefully, not crash
         #expect(text == nil || text != nil) // just verify no crash
@@ -19,7 +26,7 @@ struct SpeechEdgeCaseTests {
     @Test("Empty character ID doesn't crash")
     func emptyCharacterId() {
         let ctx = WorkContext()
-        let engine = SpeechEngine(workContext: ctx)
+        let engine = SpeechEngine(workContext: ctx, now: Self.noon)
         let text = engine.onEvent(.claudeNeedsYou, characterId: "")
         // Should not crash
         #expect(text == nil || text != nil)
